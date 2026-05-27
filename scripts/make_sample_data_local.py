@@ -28,6 +28,7 @@ PRODUCT_KEYWORDS = [
 ]
 STATEMENT_PREFIXES = ("GS", "DM", "PM", "D0", "D1", "CC", "CD")
 DOC_KEYWORDS = ["complaint", "settlement", "dismissal", "judgment", "claim construction", "summary judgment"]
+CASE_ROW_ID_CANDIDATES = ["case_row_id", "case_row", "case_id", "caseid", "case_rowid"]
 
 
 def warn(msg: str) -> None:
@@ -95,12 +96,38 @@ def pick_column(columns: Sequence[str], candidates: Sequence[str]) -> Optional[s
 
 
 def normalize_patent_id(v: object) -> str:
-    s = str(v or "").upper().replace(" ", "").replace(",", "")
+    s = _normalize_text_like(v).upper().replace(" ", "").replace(",", "").replace(".0", "")
     if s.startswith("US"):
         s = s[2:]
     return s
 
 
+def _normalize_text_like(v: object) -> str:
+    if pd.isna(v):
+        return ""
+    s = str(v).strip()
+    if s.lower() in {"", "nan", "none", "<na>"}:
+        return ""
+    return s
+
+
+def normalize_case_row_id(v: object) -> object:
+    def _norm_one(x: object) -> str:
+        s = _normalize_text_like(x).replace(" ", "").replace(".0", "")
+        return s
+
+    if isinstance(v, pd.Series):
+        return v.map(_norm_one)
+    return _norm_one(v)
+
+
+def find_case_row_col(df: pd.DataFrame) -> str:
+    col = pick_column(df.columns, CASE_ROW_ID_CANDIDATES)
+    if col:
+        return col
+    cols = list(df.columns)
+    warn(f"Cannot detect case row id column. Available columns: {cols}")
+    raise ValueError("Missing case row id column. Expected one of: " + ", ".join(CASE_ROW_ID_CANDIDATES))
 
 
 def detect_patent_fields(columns: Sequence[str]) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
@@ -348,96 +375,167 @@ def extract_litigation(args, out_dir: Path, manifest: Dict, write_state: Dict[st
         if not s:
             warn(f"Litigation source missing: {n}")
 
-    case_ids: Set[str] = set()
     patents_out = out_dir / "litigation" / "patents_sample.csv"
+    case_ids: Set[str] = set()
+    seen_keys: Set[Tuple[str, str]] = set()
     patents_rows = 0
-    if src_patents and patent_ids:
+    matched_rows = 0
+    fallback_added = 0
+    sample_case_preview: List[str] = []
+
+    if src_patents:
         pcol = None
         ccol = None
         for chunk in iter_csv_chunks(src_patents, args.chunksize):
             if pcol is None:
                 pcol = pick_column(chunk.columns, ["patent", "patent_id", "patent_no", "patent_number"])
-                ccol = pick_column(chunk.columns, ["case_row_id", "case_id", "caseid"])
-                if not pcol or not ccol:
+                if not pcol:
                     warn(f"Cannot detect litigation patent columns: {list(chunk.columns)}")
                     break
-            filtered = chunk[chunk[pcol].astype(str).map(normalize_patent_id).isin(patent_ids)]
-            if filtered.empty:
+                ccol = find_case_row_col(chunk)
+            chunk = chunk.copy()
+            chunk["normalized_patent"] = chunk[pcol].map(normalize_patent_id)
+            chunk["normalized_case_row_id"] = normalize_case_row_id(chunk[ccol])
+            chunk = chunk[(chunk["normalized_patent"] != "") & (chunk["normalized_case_row_id"] != "")]
+            if chunk.empty:
                 continue
-            if patents_rows + len(filtered) > args.max_litigation_patents:
-                filtered = filtered.head(args.max_litigation_patents - patents_rows)
-            case_ids.update(filtered[ccol].astype(str).tolist())
-            append_csv(patents_out, filtered, write_state)
-            patents_rows += len(filtered)
-            if patents_rows >= args.max_litigation_patents:
-                break
+
+            matched = chunk[chunk["normalized_patent"].isin(patent_ids)]
+            if not matched.empty:
+                keep_idx = []
+                for idx, row in matched.iterrows():
+                    key = (row["normalized_case_row_id"], row["normalized_patent"])
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+                    keep_idx.append(idx)
+                    if patents_rows + len(keep_idx) >= args.max_litigation_patents:
+                        break
+                if keep_idx:
+                    kept = matched.loc[keep_idx]
+                    case_ids.update(kept["normalized_case_row_id"].tolist())
+                    sample_case_preview.extend(kept["normalized_case_row_id"].head(10).tolist())
+                    append_csv(patents_out, kept.drop(columns=["normalized_patent", "normalized_case_row_id"]), write_state)
+                    patents_rows += len(kept)
+                    matched_rows += len(kept)
+                    if patents_rows >= args.max_litigation_patents:
+                        break
+
+            need_fallback = matched_rows < args.min_litigation_patents
+            target_rows = min(args.fallback_litigation_patents, args.max_litigation_patents)
+            if need_fallback and patents_rows < target_rows:
+                fallback = chunk
+                keep_idx = []
+                for idx, row in fallback.iterrows():
+                    key = (row["normalized_case_row_id"], row["normalized_patent"])
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+                    keep_idx.append(idx)
+                    if patents_rows + len(keep_idx) >= target_rows:
+                        break
+                if keep_idx:
+                    kept = fallback.loc[keep_idx]
+                    case_ids.update(kept["normalized_case_row_id"].tolist())
+                    sample_case_preview.extend(kept["normalized_case_row_id"].head(10).tolist())
+                    append_csv(patents_out, kept.drop(columns=["normalized_patent", "normalized_case_row_id"]), write_state)
+                    patents_rows += len(kept)
+                    fallback_added += len(kept)
+                    if patents_rows >= target_rows:
+                        break
+
+        if matched_rows < args.min_litigation_patents:
+            warn(f"Only {matched_rows} litigation patent records matched claim sample patents. Falling back to additional litigation records.")
+
     info(f"litigation/patents_sample.csv rows={patents_rows}")
     manifest[str(patents_out)] = {"rows": patents_rows, "source": str(src_patents or "")}
 
-    def filter_case_rows(src: Optional[Path], out: Path, max_rows: int):
+    def filter_case_rows(src: Optional[Path], out: Path, max_rows: int, label: str) -> Tuple[int, Optional[str], List[str], List[str]]:
         rows = 0
+        used_col = None
+        first_chunk_preview: List[str] = []
+        first_chunk_cols: List[str] = []
         if src and case_ids:
-            ccol = None
             for chunk in iter_csv_chunks(src, args.chunksize):
-                if ccol is None:
-                    ccol = pick_column(chunk.columns, ["case_row_id", "case_id", "caseid"])
-                    if not ccol:
-                        warn(f"Cannot detect case row id for {src}. Columns: {list(chunk.columns)}")
-                        break
-                filtered = chunk[chunk[ccol].astype(str).isin(case_ids)]
+                if used_col is None:
+                    used_col = find_case_row_col(chunk)
+                    first_chunk_cols = list(chunk.columns)
+                chunk = chunk.copy()
+                chunk["normalized_case_row_id"] = normalize_case_row_id(chunk[used_col])
+                if not first_chunk_preview:
+                    first_chunk_preview = chunk["normalized_case_row_id"].head(10).tolist()
+                filtered = chunk[chunk["normalized_case_row_id"].isin(case_ids)]
                 if filtered.empty:
                     continue
                 if rows + len(filtered) > max_rows:
                     filtered = filtered.head(max_rows - rows)
-                append_csv(out, filtered, write_state)
+                append_csv(out, filtered.drop(columns=["normalized_case_row_id"]), write_state)
                 rows += len(filtered)
                 if rows >= max_rows:
                     break
         info(f"{out.relative_to(out_dir)} rows={rows}")
         manifest[str(out)] = {"rows": rows, "source": str(src or "")}
+        return rows, used_col, first_chunk_preview, first_chunk_cols
 
-    filter_case_rows(src_cases, out_dir / "litigation" / "cases_sample.csv", args.max_litigation_cases)
-    filter_case_rows(src_names, out_dir / "litigation" / "names_sample.csv", args.max_litigation_names)
+    cases_rows, _, _, _ = filter_case_rows(src_cases, out_dir / "litigation" / "cases_sample.csv", args.max_litigation_cases, "cases")
+    names_rows, names_case_col, names_preview, names_columns = filter_case_rows(src_names, out_dir / "litigation" / "names_sample.csv", args.max_litigation_names, "names")
 
     docs_out = out_dir / "litigation" / "documents_sample.csv"
     docs_rows = 0
     if src_docs and case_ids:
+        ccol = None
+        scol = None
+        lcol = None
+        dpat = re.compile("|".join(re.escape(k) for k in DOC_KEYWORDS), flags=re.IGNORECASE)
         try:
-            ccol = None
-            scol = None
-            lcol = None
-            dpat = re.compile("|".join(re.escape(k) for k in DOC_KEYWORDS), flags=re.IGNORECASE)
             for chunk in iter_csv_chunks(src_docs, args.chunksize):
                 if ccol is None:
-                    ccol = pick_column(chunk.columns, ["case_row_id", "case_id", "caseid"])
+                    ccol = find_case_row_col(chunk)
                     scol = pick_column(chunk.columns, ["short_description"])
                     lcol = pick_column(chunk.columns, ["long_description"])
-                    if not ccol:
-                        warn(f"Cannot detect case row id for documents. Columns: {list(chunk.columns)}")
-                        break
-                case_mask = chunk[ccol].astype(str).isin(case_ids)
+                chunk = chunk.copy()
+                chunk["normalized_case_row_id"] = normalize_case_row_id(chunk[ccol])
+                case_mask = chunk["normalized_case_row_id"].isin(case_ids)
                 if not (scol or lcol):
                     text_mask = pd.Series([True] * len(chunk), index=chunk.index)
                 else:
-                    text = ""
+                    text = pd.Series([""] * len(chunk), index=chunk.index)
                     if scol:
-                        text = chunk[scol].astype(str)
+                        text = text + " " + chunk[scol].astype(str)
                     if lcol:
-                        text = text.astype(str) + " " + chunk[lcol].astype(str)
+                        text = text + " " + chunk[lcol].astype(str)
                     text_mask = text.str.contains(dpat, na=False)
                 filtered = chunk[case_mask & text_mask]
                 if filtered.empty:
                     continue
                 if docs_rows + len(filtered) > args.max_documents:
                     filtered = filtered.head(args.max_documents - docs_rows)
-                append_csv(docs_out, filtered, write_state)
+                append_csv(docs_out, filtered.drop(columns=["normalized_case_row_id"]), write_state)
                 docs_rows += len(filtered)
                 if docs_rows >= args.max_documents:
                     break
         except Exception as e:
             warn(f"Failed to process documents sample: {e}")
+    if docs_rows == 0:
+        warn("No matching litigation documents were found. documents_sample.csv remains optional.")
     info(f"litigation/documents_sample.csv rows={docs_rows}")
     manifest[str(docs_out)] = {"rows": docs_rows, "source": str(src_docs or "")}
+
+    if names_rows == 0:
+        warn("names_sample.csv rows=0 debug info below")
+        info(f"final patents_sample rows={patents_rows}")
+        info(f"patents_sample normalized_case_row_id head={sample_case_preview[:10]}")
+        info(f"names.csv normalized_case_row_id head(first chunk)={names_preview[:10]}")
+        info(f"names.csv columns={names_columns}")
+        info(f"names_case_col={names_case_col}")
+
+    info("litigation summary:")
+    info(f"matched_litigation_patents_from_claim_sample={matched_rows}")
+    info(f"fallback_litigation_patents_added={fallback_added}")
+    info(f"final_litigation_patents={patents_rows}")
+    info(f"final_litigation_cases={cases_rows}")
+    info(f"final_litigation_names={names_rows}")
+    info(f"final_litigation_documents={docs_rows}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -453,6 +551,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max_claim_rows", type=int, default=50000)
     p.add_argument("--fallback_patent_ids", type=int, default=1000)
     p.add_argument("--max_litigation_patents", type=int, default=20000)
+    p.add_argument("--min_litigation_patents", type=int, default=1000)
+    p.add_argument("--fallback_litigation_patents", type=int, default=5000)
     p.add_argument("--max_litigation_cases", type=int, default=5000)
     p.add_argument("--max_litigation_names", type=int, default=30000)
     p.add_argument("--max_documents", type=int, default=2000)
