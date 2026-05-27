@@ -1,0 +1,9 @@
+prompts:
+  query_router: prompts/query_router.md
+  trademark_risk: prompts/trademark_risk.md
+  patent_claim_risk: prompts/patent_claim_risk.md
+  litigation_risk: prompts/litigation_risk.md
+  listing_rewrite: prompts/listing_rewrite.md
+  final_answer: prompts/final_answer.md
+
+# TODO: add prompt metadata/versioning

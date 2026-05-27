@@ -1,0 +1,19 @@
+# Environment
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Data and indexes (heavy/generated)
+data/raw/**
+indexes/**
+
+# Databases and artifacts
+*.duckdb
+*.pkl
+*.parquet
+
+# Keep sample/eval data tracked
+!data/sample/**
+!data/eval/**
