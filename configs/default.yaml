@@ -1,4 +1,27 @@
-project:
-  name: CrossBorder Marketplace RAG Agent
+project_name: CrossBorder Marketplace RAG Agent
 
-# TODO: add runtime defaults
+duckdb_path: indexes/duckdb/ip_risk.duckdb
+
+trademark_raw_dir: data/raw/trademark
+trademark_sample_dir: data/sample/trademark
+
+platform_raw_dir: data/raw/platform
+platform_sample_dir: data/sample/platform
+
+patent_claims_raw_dir: data/raw/patent_claims
+patent_claims_sample_dir: data/sample/patent_claims
+
+litigation_raw_dir: data/raw/litigation
+litigation_sample_dir: data/sample/litigation
+
+chroma_platform_dir: indexes/chroma_platform
+chroma_claims_dir: indexes/chroma_claims
+
+bm25_platform_path: indexes/bm25_platform/bm25_platform.pkl
+bm25_claims_path: indexes/bm25_claims/bm25_claims.pkl
+
+embedding_model_name: BAAI/bge-small-en-v1.5
+
+top_k: 10
+rerank_top_k: 5
+mock_llm: false

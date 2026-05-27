@@ -51,3 +51,35 @@
 - 本项目仅用于技术研究与工程演示，不构成法律意见。
 - 侵权风险判断结果仅供参考，实际合规结论应由专业律师或合规团队复核。
 - 数据源可能存在时效性与覆盖范围限制，需结合最新官方信息使用。
+
+## 配置方式
+项目使用 `configs/default.yaml` + `.env` 的双层配置：
+- `configs/default.yaml`：存放工程默认路径与检索参数（如 `top_k`、`rerank_top_k`）。
+- `.env`：存放敏感或环境相关参数（如 OpenAI Key/Model），不建议提交到版本库。
+- 运行时通过 `src/config.py` 中的 `get_settings()` 统一加载配置。
+
+## `.env` 使用方式
+可在项目根目录创建 `.env`（示例）：
+
+```bash
+OPENAI_API_KEY=your_api_key
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4.1-mini
+MOCK_LLM=true
+```
+
+说明：
+- `MOCK_LLM` 支持 `true/false`、`1/0`、`yes/no` 等布尔写法。
+- 当 `MOCK_LLM=true` 时，可用于本地调试时跳过真实 LLM 调用流程（本项目当前任务不包含调用 LLM）。
+
+## sample 数据和 raw 数据区别
+- `data/sample/`：轻量样例数据，用于本地开发、联调与 CI 快速验证。
+- `data/raw/`：原始全量或准全量数据，用于真实构建索引与效果评估，体量通常较大且来源多样。
+
+建议开发流程：先用 `sample` 跑通端到端，再切换 `raw` 做效果验证与性能测试。
+
+## 为什么 full-scale 数据不上传 GitHub
+- **体积限制**：GitHub 对大文件与仓库体积不友好，影响 clone/pull 速度。
+- **版权与许可**：部分外部数据源存在使用条款，不能二次分发。
+- **合规与隐私**：某些数据可能含敏感字段，需在受控环境使用。
+- **可维护性**：大规模数据频繁更新，建议通过离线数据管道或对象存储管理，而非直接随代码版本化。

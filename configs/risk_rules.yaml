@@ -1,7 +1,39 @@
-risk_rules:
-  trademark: []
-  platform_policy: []
-  patent_claim: []
-  litigation: []
+exact_live_trademark_without_authorization:
+  enabled: true
+  severity: high
+  description: Listing uses a live trademark and seller has no authorization.
 
-# TODO: define initial static rules
+compatible_with_brand:
+  enabled: true
+  severity: medium
+  description: Listing says compatible with a brand, which may increase trademark scrutiny.
+
+style_or_inspired_by_brand:
+  enabled: true
+  severity: medium
+  description: Listing wording suggests style/inspired-by association with a brand.
+
+category_related:
+  enabled: true
+  severity: medium
+  description: Product category is related to trademark-covered goods/services.
+
+related_claim_group_found:
+  enabled: true
+  severity: medium
+  description: Retrieved patent claim group appears related to listing features.
+
+patent_litigated:
+  enabled: true
+  severity: medium
+  description: Related patent has litigation history.
+
+patent_litigated_multiple_cases:
+  enabled: true
+  severity: high
+  description: Related patent appears in multiple litigation cases.
+
+platform_policy_evidence_found:
+  enabled: true
+  severity: medium
+  description: Platform policy/IP evidence found that may affect listing compliance.
