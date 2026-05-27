@@ -19,6 +19,9 @@ RISK_BRANDS = [
     "PAW PATROL", "PEPPA PIG", "HARRY POTTER",
 ]
 PRODUCT_KEYWORDS = [
+    "case", "holder", "stand", "magnetic", "foldable", "charger", "wireless", "battery", "glove",
+    "grooming", "vacuum", "bottle", "tumbler", "block", "toy", "shoe", "backpack", "dryer",
+    "phone", "mobile", "cover", "container", "cup",
     "phone case", "magnetic holder", "phone stand", "foldable stand", "ring holder",
     "wireless charger", "heated glove", "battery glove", "pet grooming", "vacuum",
     "tumbler", "water bottle", "toy building block", "shoe sole", "backpack", "hair dryer",
@@ -96,6 +99,21 @@ def normalize_patent_id(v: object) -> str:
     if s.startswith("US"):
         s = s[2:]
     return s
+
+
+
+
+def detect_patent_fields(columns: Sequence[str]) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
+    patent_id_field = pick_column(columns, [
+        "pat_no", "patent_id", "patent", "patent_no", "patent_number", "doc_id", "document_id", "appl_id"
+    ])
+    claim_text_field = pick_column(columns, [
+        "claim_txt", "claim_text", "text", "claim", "claims_text", "claim_text_original"
+    ])
+    claim_no_field = pick_column(columns, ["claim_no", "claim_number", "claim_num"])
+    dependency_field = pick_column(columns, ["dependencies", "dependency", "depends_on"])
+    independent_field = pick_column(columns, ["ind_flg", "independent_flag", "is_independent"])
+    return patent_id_field, claim_text_field, claim_no_field, dependency_field, independent_field
 
 
 def append_csv(path: Path, df: pd.DataFrame, state: Dict[str, bool]) -> None:
@@ -208,18 +226,25 @@ def extract_patent_claims(args, out_dir: Path, manifest: Dict, write_state: Dict
 
     keyword_pat = re.compile("|".join(re.escape(k) for k in PRODUCT_KEYWORDS), flags=re.IGNORECASE)
     patent_ids: Set[str] = set()
-    pid_col = None
-    txt_col = None
+    patent_id_field = None
+    claim_text_field = None
+
     if src_full:
         for chunk in iter_csv_chunks(src_full, args.chunksize):
-            if pid_col is None:
-                pid_col = pick_column(chunk.columns, ["patent_id", "patent", "patent_no", "patent_number", "doc_id", "document_id"])
-                txt_col = pick_column(chunk.columns, ["claim_text", "text", "claim_txt", "claim", "claims_text", "claim_text_original"])
-                if not pid_col or not txt_col:
+            if patent_id_field is None:
+                patent_id_field, claim_text_field, claim_no_field, dependency_field, independent_field = detect_patent_fields(chunk.columns)
+                if not patent_id_field or not claim_text_field:
                     warn(f"Cannot detect patent fields in {src_full}. Columns: {list(chunk.columns)}")
                     break
-            hit = chunk[chunk[txt_col].astype(str).str.contains(keyword_pat, na=False)]
-            for v in hit[pid_col].astype(str):
+                info(f"Detected patent_id_field={patent_id_field}, claim_text_field={claim_text_field}")
+                info(
+                    "Optional claim fields: "
+                    f"claim_no={claim_no_field}, dependencies={dependency_field}, independent_flag={independent_field}"
+                )
+            hit = chunk[chunk[claim_text_field].astype(str).str.contains(keyword_pat, na=False)]
+            if hit.empty:
+                continue
+            for v in hit[patent_id_field].astype(str):
                 patent_ids.add(normalize_patent_id(v))
                 if len(patent_ids) >= args.max_patent_ids:
                     break
@@ -230,12 +255,12 @@ def extract_patent_claims(args, out_dir: Path, manifest: Dict, write_state: Dict
     claim_rows = 0
     if src_full and patent_ids:
         for chunk in iter_csv_chunks(src_full, args.chunksize):
-            if pid_col is None:
-                pid_col = pick_column(chunk.columns, ["patent_id", "patent", "patent_no", "patent_number", "doc_id", "document_id"])
-                if not pid_col:
+            if patent_id_field is None:
+                patent_id_field, _, _, _, _ = detect_patent_fields(chunk.columns)
+                if not patent_id_field:
                     warn(f"Cannot detect patent id in second pass. Columns: {list(chunk.columns)}")
                     break
-            normalized = chunk[pid_col].astype(str).map(normalize_patent_id)
+            normalized = chunk[patent_id_field].astype(str).map(normalize_patent_id)
             filtered = chunk[normalized.isin(patent_ids)]
             if filtered.empty:
                 continue
@@ -245,6 +270,42 @@ def extract_patent_claims(args, out_dir: Path, manifest: Dict, write_state: Dict
             claim_rows += len(filtered)
             if claim_rows >= args.max_claim_rows:
                 break
+
+    if src_full and claim_rows == 0:
+        warn("No keyword-based patent claims matched. Falling back to first N patent IDs.")
+        fallback_ids: Set[str] = set()
+        for chunk in iter_csv_chunks(src_full, args.chunksize):
+            local_pid, _, _, _, _ = detect_patent_fields(chunk.columns)
+            if not local_pid:
+                warn(f"Cannot detect patent id for fallback. Columns: {list(chunk.columns)}")
+                break
+            for v in chunk[local_pid].astype(str):
+                norm = normalize_patent_id(v)
+                if norm:
+                    fallback_ids.add(norm)
+                if len(fallback_ids) >= args.fallback_patent_ids:
+                    break
+            if len(fallback_ids) >= args.fallback_patent_ids:
+                break
+        patent_ids = fallback_ids
+
+        if patent_ids:
+            for chunk in iter_csv_chunks(src_full, args.chunksize):
+                local_pid, _, _, _, _ = detect_patent_fields(chunk.columns)
+                if not local_pid:
+                    warn(f"Cannot detect patent id in fallback second pass. Columns: {list(chunk.columns)}")
+                    break
+                normalized = chunk[local_pid].astype(str).map(normalize_patent_id)
+                filtered = chunk[normalized.isin(patent_ids)]
+                if filtered.empty:
+                    continue
+                if claim_rows + len(filtered) > args.max_claim_rows:
+                    filtered = filtered.head(args.max_claim_rows - claim_rows)
+                append_csv(full_out, filtered, write_state)
+                claim_rows += len(filtered)
+                if claim_rows >= args.max_claim_rows:
+                    break
+
     info(f"patent_claims/patent_claims_fulltext_sample.csv rows={claim_rows}")
     manifest[str(full_out)] = {"rows": claim_rows, "source": str(src_full or "")}
 
@@ -254,10 +315,14 @@ def extract_patent_claims(args, out_dir: Path, manifest: Dict, write_state: Dict
             local_pid = None
             for chunk in iter_csv_chunks(src, args.chunksize):
                 if local_pid is None:
-                    local_pid = pick_column(chunk.columns, ["patent_id", "patent", "patent_no", "patent_number", "doc_id", "document_id"])
+                    local_pid = pick_column(
+                        chunk.columns,
+                        ["pat_no", "patent_id", "patent", "patent_no", "patent_number", "doc_id", "document_id", "appl_id"],
+                    )
                     if not local_pid:
                         warn(f"Cannot detect patent id for {src}. Columns: {list(chunk.columns)}")
                         break
+                    info(f"Detected stats patent_id_field={local_pid} for {src.name}")
                 normalized = chunk[local_pid].astype(str).map(normalize_patent_id)
                 filtered = chunk[normalized.isin(patent_ids)]
                 if filtered.empty:
@@ -386,6 +451,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max_statement_rows", type=int, default=50000)
     p.add_argument("--max_patent_ids", type=int, default=3000)
     p.add_argument("--max_claim_rows", type=int, default=50000)
+    p.add_argument("--fallback_patent_ids", type=int, default=1000)
     p.add_argument("--max_litigation_patents", type=int, default=20000)
     p.add_argument("--max_litigation_cases", type=int, default=5000)
     p.add_argument("--max_litigation_names", type=int, default=30000)
