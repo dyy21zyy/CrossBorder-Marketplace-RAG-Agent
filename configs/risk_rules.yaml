@@ -1,0 +1,7 @@
+risk_rules:
+  trademark: []
+  platform_policy: []
+  patent_claim: []
+  litigation: []
+
+# TODO: define initial static rules

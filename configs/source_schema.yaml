@@ -1,0 +1,7 @@
+sources:
+  trademark: {}
+  platform: {}
+  patent_claims: {}
+  litigation: {}
+
+# TODO: define schema mapping for each source
