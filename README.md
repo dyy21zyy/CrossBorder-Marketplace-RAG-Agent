@@ -91,6 +91,16 @@ MOCK_LLM=true
 python scripts/make_sample_data_local.py
 ```
 
+Patent Claims Research Dataset 的实际字段如下（脚本已按这些字段优先识别）：
+
+- `pat_no`：专利号
+- `claim_no`：权利要求编号
+- `claim_txt`：权利要求文本
+- `dependencies`：从属关系
+- `ind_flg`：是否独立权利要求
+- `appl_id`：申请编号
+
+
 Windows 显式传参示例：
 
 ```bash
