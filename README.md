@@ -117,3 +117,25 @@ python scripts/make_sample_data_local.py ^
   --temu_dir "C:\Users\dyy21\OneDrive\TJ\工作\资料\Rag\Temu" ^
   --sample_dir "data/sample"
 ```
+
+## Trademark Structured RAG（USPTO）
+USPTO Trademark 数据是天然结构化表（案件、权利人、尼斯分类、声明等），适合走 **DuckDB Structured RAG** 路线：
+- 先将 CSV 原表导入 DuckDB（`raw_*`）；
+- 再构建轻量检索表（`trademark_case/owner/class/statement`）；
+- 检索阶段按字段过滤、关联与聚合，而非把全量记录转成长文本。
+
+### 为什么 USPTO Trademark 不直接向量化
+- 结构字段可精确过滤（如 `serial_no`、`statement_type_cd`、`intl_class_cd`），向量检索会引入不必要噪声。
+- 大规模 Trademark 全量文本向量化成本高、更新慢，不利于可控检索。
+- 合规风控场景强调可追溯和可解释，Structured RAG 更容易还原证据路径。
+
+### 构建命令
+```bash
+python scripts/01_build_trademark_db.py --sample --force_rebuild
+```
+
+脚本会自动：
+1. 初始化 `indexes/duckdb/trademark.duckdb`；
+2. 导入 Trademark 原始 CSV（优先 `data/raw/trademark`，不存在时回退 `data/sample/trademark`）；
+3. 构建轻量检索表并创建索引；
+4. 打印各表行数。

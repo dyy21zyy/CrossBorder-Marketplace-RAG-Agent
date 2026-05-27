@@ -1,0 +1,3 @@
+serial_no,registration_no,mark_id_char,mark_draw_cd,filing_dt,registration_dt,cfh_status_cd,cfh_status_dt,trade_mark_in,serv_mark_in,std_char_claim_in
+1001,5001,acme   rocket,4,2021-01-01,2022-01-01,700,2022-02-02,Y,N,Y
+1002,5002,,5,2021-03-01,2022-03-01,710,2022-04-02,N,Y,N
