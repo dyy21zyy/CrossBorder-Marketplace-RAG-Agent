@@ -83,3 +83,21 @@ MOCK_LLM=true
 - **版权与许可**：部分外部数据源存在使用条款，不能二次分发。
 - **合规与隐私**：某些数据可能含敏感字段，需在受控环境使用。
 - **可维护性**：大规模数据频繁更新，建议通过离线数据管道或对象存储管理，而非直接随代码版本化。
+
+## Creating Sample Data from Local Full Datasets
+使用以下命令从本地全量数据抽取可上传到 GitHub 的轻量 sample 数据：
+
+```bash
+python scripts/make_sample_data_local.py
+```
+
+Windows 显式传参示例：
+
+```bash
+python scripts/make_sample_data_local.py ^
+  --trademark_dir "C:\Users\dyy21\OneDrive\TJ\工作\资料\Rag\USPTO trademark" ^
+  --patent_claims_dir "C:\Users\dyy21\OneDrive\TJ\工作\资料\Rag\Patent Claims Research Dataset" ^
+  --litigation_dir "C:\Users\dyy21\OneDrive\TJ\工作\资料\Rag\Patent Litigation Docket Reports Data" ^
+  --temu_dir "C:\Users\dyy21\OneDrive\TJ\工作\资料\Rag\Temu" ^
+  --sample_dir "data/sample"
+```
