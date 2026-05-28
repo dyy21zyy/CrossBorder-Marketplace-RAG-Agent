@@ -1,119 +1,56 @@
 from __future__ import annotations
-
-import json
+import json,time
 from pathlib import Path
 from typing import Any
-
 from src.retrieval.claim_retriever import ClaimRetriever
-from src.retrieval.litigation_retriever import LitigationRetriever
 from src.retrieval.platform_retriever import PlatformPolicyRetriever
-from src.retrieval.trademark_retriever import TrademarkRetriever
-from src.schemas import ListingInput
 
+def _load_jsonl(path):
+    return [json.loads(x) for x in Path(path).read_text(encoding='utf-8').splitlines() if x.strip()]
 
-def _load_jsonl(path: str | Path) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    with Path(path).open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                rows.append(json.loads(line))
-    return rows
+def _overlap(text, kws):
+    t=text.lower(); kws=[k.lower() for k in kws]
+    hit=sum(1 for k in kws if k in t)
+    return hit, (hit/len(kws) if kws else 0.0)
 
-
-def _contains_keywords(texts: list[str], keywords: list[str]) -> bool:
-    if not keywords:
-        return True
-    all_text = "\n".join(texts).lower()
-    return any(k.lower() in all_text for k in keywords)
-
-
-def evaluate_retrieval(path: str = "data/eval/retrieval_eval.jsonl") -> dict[str, Any]:
-    samples = _load_jsonl(path)
-    tm = TrademarkRetriever()
-    lr = LitigationRetriever()
-    results: list[dict[str, Any]] = []
-
-    metric_hits = {
-        "trademark_hit_rate": [],
-        "platform_policy_recall_at_k": [],
-        "claim_retrieval_recall_at_k": [],
-        "litigation_patent_hit_rate": [],
-    }
-
-    for row in samples:
-        q = row.get("query") or f"{row.get('title','')} {row.get('description','')}".strip()
-        top_k = int(row.get("top_k", 5) or 5)
-        expected_type = str(row.get("expected_source_type", "")).strip().lower()
-        keywords = [str(x) for x in row.get("expected_keywords", [])]
-
-        hit_tm = hit_platform = hit_claim = hit_lit = False
-        detail: dict[str, Any] = {}
-
+def _eval_module(samples,module,use_reranker=False):
+    rec=pre=mrr=ctx=lat=0.0; n=0
+    pr=None; cr=None
+    for s in samples:
+        if s.get('module')!=module: continue
+        n+=1; k=int(s.get('top_k',5)); q=s['query']; kws=s.get('expected_keywords',[])
+        st=time.perf_counter()
         try:
-            listing = ListingInput(
-                title=str(row.get("title") or row.get("query") or ""),
-                description=str(row.get("description", "")),
-                category=str(row.get("category", "")),
-                platform=str(row.get("platform", "Temu")),
-                has_authorization=bool(row.get("has_authorization", False)),
-            )
-            from src.listing.listing_parser import parse_listing
+            if module=='platform_policy':
+                pr = pr or PlatformPolicyRetriever()
+                rows=pr.hybrid_search(q,top_k=k,use_reranker=use_reranker)
+            else:
+                cr = cr or ClaimRetriever()
+                rows=cr.hybrid_search(q,top_k=k,use_reranker=use_reranker)
+        except Exception:
+            rows=[]
+        lat += time.perf_counter()-st
+        texts=[(r.snippet if hasattr(r,'snippet') else str(r.get('text',''))) for r in rows]
+        rel=[]
+        for tx in texts:
+            h,sc=_overlap(tx,kws); rel.append((h>0,sc)); ctx+=sc
+        rec += 1.0 if any(x[0] for x in rel) else 0.0
+        pre += (sum(1 for x in rel if x[0]) / max(1,k))
+        rr=0.0
+        for i,(ok,_) in enumerate(rel,1):
+            if ok: rr=1/i; break
+        mrr += rr
+    if n==0:n=1
+    return {'module':module,'recall_at_5':rec/n,'precision_at_5':pre/n,'mrr':mrr/n,'avg_context_relevance':ctx/(n*5),'avg_latency_sec':lat/n}
 
-            parsed = parse_listing(listing)
-            tm_matches = tm.search_trademarks(parsed)
-            hit_tm = len(tm_matches) > 0 and _contains_keywords([m.mark_id_char for m in tm_matches], keywords)
-            detail["trademark_matches"] = len(tm_matches)
-        except Exception as e:  # noqa: BLE001
-            detail["trademark_error"] = str(e)
-
-        try:
-            pp = PlatformPolicyRetriever(top_k=top_k).hybrid_search(q)
-            hit_platform = len(pp) > 0 and _contains_keywords([x.snippet for x in pp], keywords)
-            detail["platform_hits"] = len(pp)
-        except Exception as e:  # noqa: BLE001
-            detail["platform_error"] = str(e)
-
-        try:
-            cr = ClaimRetriever().hybrid_search(q, top_k=top_k)
-            hit_claim = len(cr) > 0 and _contains_keywords([str(x.get("text", "")) for x in cr], keywords)
-            detail["claim_hits"] = len(cr)
-        except Exception as e:  # noqa: BLE001
-            detail["claim_error"] = str(e)
-
-        try:
-            patent_ids = [str(x) for x in row.get("patent_ids", [])]
-            if not patent_ids:
-                patent_ids = [str(x.get("patent_id", "")) for x in row.get("expected_patents", []) if x]
-            lit_found = 0
-            for pid in patent_ids:
-                if lr.get_litigation_summary(pid):
-                    lit_found += 1
-            hit_lit = lit_found > 0 if patent_ids else False
-            detail["litigation_hits"] = lit_found
-        except Exception as e:  # noqa: BLE001
-            detail["litigation_error"] = str(e)
-
-        metric_hits["trademark_hit_rate"].append(hit_tm)
-        metric_hits["platform_policy_recall_at_k"].append(hit_platform)
-        metric_hits["claim_retrieval_recall_at_k"].append(hit_claim)
-        metric_hits["litigation_patent_hit_rate"].append(hit_lit)
-
-        exp_map = {
-            "trademark": hit_tm,
-            "platform_policy": hit_platform,
-            "patent_claim": hit_claim,
-            "litigation": hit_lit,
-        }
-        overall_hit = exp_map.get(expected_type, any([hit_tm, hit_platform, hit_claim, hit_lit]))
-
-        results.append({"id": row.get("id", ""), "query": q, "hit": overall_hit, "expected_source_type": expected_type, **detail})
-
-    def _rate(vals: list[bool]) -> float:
-        return 0.0 if not vals else sum(1 for x in vals if x) / len(vals)
-
-    metrics = {k: _rate(v) for k, v in metric_hits.items()}
-    metrics["total_samples"] = len(samples)
-    metrics["overall_hit_rate"] = _rate([x["hit"] for x in results])
-
-    return {"samples": results, "metrics": metrics}
+def evaluate_retrieval(path='data/eval/retrieval_eval.jsonl',compare_reranker=False):
+    samples=_load_jsonl(path)
+    mods=['platform_policy','patent_claim']
+    base=[dict(mode='no_reranker',**_eval_module(samples,m,False)) for m in mods]
+    if not compare_reranker:
+        return {'no_reranker':base}
+    withr=[dict(mode='with_reranker',**_eval_module(samples,m,True)) for m in mods]
+    imp=[]
+    for b,w in zip(base,withr,strict=False):
+        imp.append({'module':b['module'],'recall_at_5_delta':w['recall_at_5']-b['recall_at_5'],'precision_at_5_delta':w['precision_at_5']-b['precision_at_5'],'mrr_delta':w['mrr']-b['mrr'],'context_relevance_delta':w['avg_context_relevance']-b['avg_context_relevance'],'latency_delta':w['avg_latency_sec']-b['avg_latency_sec']})
+    return {'no_reranker':base,'with_reranker':withr,'improvement':imp}

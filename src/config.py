@@ -30,6 +30,9 @@ class Settings(BaseModel):
     bm25_claims_path: str
     embedding_model_name: str
     top_k: int = 10
+    use_reranker: bool = False
+    reranker_model_name: str = "BAAI/bge-reranker-base"
+    rerank_input_top_k: int = 20
     rerank_top_k: int = 5
     openai_api_key: str = ""
     openai_base_url: str = ""
@@ -98,7 +101,10 @@ def get_settings() -> Settings:
         "bm25_platform_path": defaults["bm25_platform_path"],
         "bm25_claims_path": defaults["bm25_claims_path"],
         "embedding_model_name": defaults["embedding_model_name"],
-        "top_k": int(defaults.get("top_k", 10)),
+        "top_k": int(defaults.get("top_k", 5)),
+        "use_reranker": _to_bool(defaults.get("use_reranker", False), default=False),
+        "reranker_model_name": str(defaults.get("reranker_model_name", "BAAI/bge-reranker-base")),
+        "rerank_input_top_k": int(defaults.get("rerank_input_top_k", 20)),
         "rerank_top_k": int(defaults.get("rerank_top_k", 5)),
         "openai_api_key": openai_api_key,
         "openai_base_url": openai_base_url,

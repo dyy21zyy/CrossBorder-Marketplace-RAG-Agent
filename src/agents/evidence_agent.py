@@ -11,6 +11,7 @@ class EvidenceAgent:
         routed_intents: list[str],
         enable_patent_check: bool = True,
         enable_litigation_check: bool = True,
+        use_reranker: bool = False,
     ) -> dict:
         parsed = parse_listing(listing_input)
         trademark_matches = []
@@ -34,7 +35,7 @@ class EvidenceAgent:
 
                 pr = PlatformPolicyRetriever()
                 query = f"{parsed.normalized_title} {parsed.normalized_description}".strip()
-                platform_evidence = pr.hybrid_search(query)
+                platform_evidence = pr.hybrid_search(query, top_k=5, use_reranker=use_reranker)
             except Exception:  # noqa: BLE001
                 platform_evidence = [EvidenceItem(evidence_id="platform-missing", evidence_type="system", source="platform_policy", snippet="Please run python scripts/02_build_platform_index.py first.")]
 
@@ -45,7 +46,7 @@ class EvidenceAgent:
 
                 cr = ClaimRetriever()
                 query = f"{parsed.normalized_title} {parsed.normalized_description}".strip()
-                raw = cr.hybrid_search(query, top_k=5)
+                raw = cr.hybrid_search(query, top_k=5, use_reranker=use_reranker)
                 for i, item in enumerate(raw):
                     patent_id = str(item.get("patent_id") or item.get("metadata", {}).get("patent_id", ""))
                     if patent_id:

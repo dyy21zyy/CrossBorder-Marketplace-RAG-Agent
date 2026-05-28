@@ -132,3 +132,25 @@ python scripts/06_run_eval.py --mock_llm true
 
 ## Disclaimer
 For **preliminary IP risk screening only**. Not legal advice.
+
+## Reranker Ablation Study
+
+本项目评估两种检索配置：
+1. Hybrid Retrieval: Chroma + BM25 + RRF
+2. Hybrid Retrieval + Reranker: Chroma + BM25 + RRF + BGE Reranker
+
+- RRF 用于融合向量检索和 BM25；
+- Reranker 用 cross-encoder 对候选 evidence 精排；
+- Reranker 可能提升 Precision@K 和 MRR，但会增加 latency；
+- 评估脚本会输出 no_reranker vs with_reranker 的对比。
+
+运行命令：
+
+```bash
+python scripts/06_run_eval.py --compare_reranker --mock_llm true
+```
+
+补充说明：
+- 如果本地无法下载 BAAI/bge-reranker-base，可以设置 `HF_ENDPOINT=https://hf-mirror.com`；
+- 或者先关闭 `use_reranker`；
+- sample 数据结果只用于 demo，不代表全量数据最终效果。
