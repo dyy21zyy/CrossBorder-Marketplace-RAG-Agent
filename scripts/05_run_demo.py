@@ -13,6 +13,7 @@ from src.decision.trademark_risk import assess_trademark_risk
 from src.listing.listing_parser import parse_listing
 from src.retrieval.evidence_formatter import format_trademark_evidence
 from src.retrieval.trademark_retriever import TrademarkRetriever
+from src.retrieval.platform_retriever import PlatformPolicyRetriever
 from src.schemas import ListingInput
 
 
@@ -63,6 +64,23 @@ def main() -> None:
     print(risk.model_dump_json(indent=2, ensure_ascii=False))
     print("\n=== Evidence ===")
     print(json.dumps(evidence, ensure_ascii=False, indent=2))
+
+    if risk.risk_level.lower() in {"high", "medium"}:
+        policy_query = "Temu intellectual property trademark infringement report enforcement"
+        policy_retriever = PlatformPolicyRetriever()
+        policy_evidence = policy_retriever.hybrid_search(policy_query)
+        policy_output = [
+            {
+                "source": e.source,
+                "section": e.metadata.get("section"),
+                "page": f"{e.metadata.get('page_start')}-{e.metadata.get('page_end')}",
+                "chunk_text": e.snippet,
+                "score": e.score,
+            }
+            for e in policy_evidence
+        ]
+        print("\n=== Platform policy evidence ===")
+        print(json.dumps(policy_output, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

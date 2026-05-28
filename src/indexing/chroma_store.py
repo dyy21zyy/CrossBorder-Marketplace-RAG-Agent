@@ -1,10 +1,70 @@
-"""chroma_store module for CrossBorder Marketplace RAG Agent.
+"""Chroma vector store helpers."""
 
-TODO: implement chroma_store functionality.
-"""
+from __future__ import annotations
 
-# TODO: add concrete implementation.
+from pathlib import Path
+from typing import Any
 
-def placeholder() -> None:
-    """Minimal importable placeholder function."""
-    return None
+import chromadb
+
+from src.indexing.embeddings import load_embedding_model
+
+
+class _CollectionWrapper:
+    def __init__(self, collection: Any) -> None:
+        self.collection = collection
+
+
+def build_chroma_index(documents: list[dict[str, Any]], persist_dir: str, collection_name: str) -> _CollectionWrapper:
+    Path(persist_dir).mkdir(parents=True, exist_ok=True)
+    client = chromadb.PersistentClient(path=persist_dir)
+    try:
+        client.delete_collection(collection_name)
+    except Exception:  # noqa: BLE001
+        pass
+    collection = client.get_or_create_collection(name=collection_name)
+
+    model = load_embedding_model()
+    texts = [d.get("text", "") for d in documents]
+    embeddings = model.encode(texts, normalize_embeddings=True).tolist()
+    ids = [str(d.get("chunk_id", f"chunk_{i}")) for i, d in enumerate(documents)]
+    metadatas = [{k: v for k, v in d.items() if k != "text"} for d in documents]
+
+    collection.add(ids=ids, documents=texts, embeddings=embeddings, metadatas=metadatas)
+    return _CollectionWrapper(collection)
+
+
+def load_chroma_collection(persist_dir: str, collection_name: str) -> _CollectionWrapper:
+    client = chromadb.PersistentClient(path=persist_dir)
+    collection = client.get_collection(name=collection_name)
+    return _CollectionWrapper(collection)
+
+
+def vector_search(collection: _CollectionWrapper, query: str, top_k: int = 5) -> list[dict[str, Any]]:
+    model = load_embedding_model()
+    query_emb = model.encode([query], normalize_embeddings=True).tolist()
+    result = collection.collection.query(query_embeddings=query_emb, n_results=top_k)
+
+    ids = result.get("ids", [[]])[0]
+    docs = result.get("documents", [[]])[0]
+    metas = result.get("metadatas", [[]])[0]
+    distances = result.get("distances", [[]])[0]
+
+    outputs: list[dict[str, Any]] = []
+    for idx, chunk_id in enumerate(ids):
+        meta = metas[idx] or {}
+        distance = float(distances[idx]) if idx < len(distances) else 0.0
+        outputs.append(
+            {
+                "id": chunk_id,
+                "chunk_id": chunk_id,
+                "text": docs[idx] if idx < len(docs) else "",
+                "score": 1.0 / (1.0 + distance),
+                "source": meta.get("source", "Temu IP Policy"),
+                "section": meta.get("section", "general"),
+                "page_start": meta.get("page_start"),
+                "page_end": meta.get("page_end"),
+                "metadata": meta,
+            }
+        )
+    return outputs
