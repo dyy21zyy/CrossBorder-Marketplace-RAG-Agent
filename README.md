@@ -277,3 +277,83 @@ OPENAI_MODEL=
 - Qwen Compatible: `OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`
 
 即使没有 API Key，也可使用 `MOCK_LLM=true` 跑通全流程。
+
+## CLI Demo（快速体验）
+运行命令：
+
+```bash
+python scripts/05_run_demo.py \
+  --title "Phone case compatible with iPhone 15" \
+  --description "Magnetic transparent phone case for iPhone 15" \
+  --category "phone accessory" \
+  --platform "Temu" \
+  --has_authorization false \
+  --enable_patent_check false \
+  --enable_litigation_check false \
+  --mock_llm true
+```
+
+输出包含：
+1. Parsed Listing
+2. Routed Intents
+3. Trademark Matches
+4. Platform Policy Evidence
+5. Patent Claim Evidence
+6. Litigation Evidence
+7. Risk Results
+8. Listing Rewrite Suggestions
+9. Final Answer
+10. Disclaimer
+
+## Streamlit Demo（快速体验）
+方式一：
+
+```bash
+python scripts/07_run_webapp.py
+```
+
+方式二：
+
+```bash
+streamlit run src/webapp/app.py
+```
+
+页面包含输入项：`title`、`description`、`category`、`platform`、`has_authorization`、`enable_patent_check`、`enable_litigation_check`、`mock_llm`。
+
+默认示例：
+- Title: Phone case compatible with iPhone 15
+- Description: Magnetic transparent phone case for iPhone 15
+- Category: phone accessory
+- Platform: Temu
+- Has authorization: false
+
+## 示例输入输出
+输入：
+- title: Phone case compatible with iPhone 15
+- description: Magnetic transparent phone case for iPhone 15
+- category: phone accessory
+- platform: Temu
+- has_authorization: false
+
+输出重点：
+- Overall Risk badge
+- Trademark / Platform Policy / Patent Claim / Litigation 四维风险
+- Evidence 表格（source_type/source/score/metadata/snippet）
+- Rewrite Suggestions
+- Final Answer
+- Disclaimer
+
+## 常见问题（FAQ）
+1. **DuckDB 不存在怎么办？**
+   - 商标库：`python scripts/01_build_trademark_db.py --sample --force_rebuild`
+   - 诉讼库：`python scripts/04_build_litigation_db.py --sample --force_rebuild`
+
+2. **Chroma/BM25 索引不存在怎么办？**
+   - 平台规则索引：`python scripts/02_build_platform_index.py`
+   - Claim 索引：`python scripts/03_build_claim_index.py --sample --limit 50000`
+
+3. **没有 API Key 怎么跑？**
+   - 设置 `MOCK_LLM=true` 即可跑通完整 Demo（CLI/Web）。
+
+4. **为什么输出不是法律意见？**
+   - 系统只做初步风险筛查，输出不构成法律意见；最终结论需由律师或合规团队复核。

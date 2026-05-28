@@ -1,10 +1,6 @@
 from __future__ import annotations
 
 from src.listing.listing_parser import parse_listing
-from src.retrieval.claim_retriever import ClaimRetriever
-from src.retrieval.litigation_retriever import LitigationRetriever
-from src.retrieval.platform_retriever import PlatformPolicyRetriever
-from src.retrieval.trademark_retriever import TrademarkRetriever
 from src.schemas import EvidenceItem, ListingInput
 
 
@@ -24,6 +20,8 @@ class EvidenceAgent:
         litigation_evidence: list[EvidenceItem] = []
 
         try:
+            from src.retrieval.trademark_retriever import TrademarkRetriever
+
             tm = TrademarkRetriever()
             trademark_matches = tm.search_trademarks(parsed)
             trademark_evidence = [m.evidence for m in trademark_matches if m.evidence is not None]
@@ -32,6 +30,8 @@ class EvidenceAgent:
 
         if "platform_policy" in routed_intents:
             try:
+                from src.retrieval.platform_retriever import PlatformPolicyRetriever
+
                 pr = PlatformPolicyRetriever()
                 query = f"{parsed.normalized_title} {parsed.normalized_description}".strip()
                 platform_evidence = pr.hybrid_search(query)
@@ -41,6 +41,8 @@ class EvidenceAgent:
         patent_ids: list[str] = []
         if enable_patent_check and "patent_claim_risk" in routed_intents:
             try:
+                from src.retrieval.claim_retriever import ClaimRetriever
+
                 cr = ClaimRetriever()
                 query = f"{parsed.normalized_title} {parsed.normalized_description}".strip()
                 raw = cr.hybrid_search(query, top_k=5)
@@ -54,6 +56,8 @@ class EvidenceAgent:
 
         if enable_litigation_check and ("litigation_risk" in routed_intents or patent_ids):
             try:
+                from src.retrieval.litigation_retriever import LitigationRetriever
+
                 lr = LitigationRetriever()
                 for pid in sorted(set(patent_ids)):
                     summary = lr.get_litigation_summary(pid)

@@ -1,10 +1,17 @@
-"""07_run_webapp module for CrossBorder Marketplace RAG Agent.
+from __future__ import annotations
 
-TODO: implement 07_run_webapp functionality.
-"""
+import subprocess
+import sys
+from pathlib import Path
 
-# TODO: add concrete implementation.
 
-def placeholder() -> None:
-    """Minimal importable placeholder function."""
-    return None
+def main() -> None:
+    app_path = Path("src/webapp/app.py")
+    print("Run: streamlit run src/webapp/app.py")
+    if not app_path.exists():
+        raise FileNotFoundError(f"Missing app file: {app_path}")
+    subprocess.run([sys.executable, "-m", "streamlit", "run", str(app_path)], check=False)
+
+
+if __name__ == "__main__":
+    main()
