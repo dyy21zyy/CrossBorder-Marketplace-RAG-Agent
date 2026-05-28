@@ -234,3 +234,46 @@ python scripts/04_build_litigation_db.py --sample --force_rebuild
 - LLM 仅用于复杂路由兜底、冲突判断和最终解释生成；
 - LLM 不直接读取原始 CSV；
 - LLM 不能脱离 evidence 做法律结论。
+
+## Final Answer Agent
+`FinalAnswerAgent` 基于 `EvidenceBundle + RiskResult + ListingRewrite suggestions` 输出结构化最终解释。
+核心约束：
+- 只可基于 evidence；
+- 证据不足必须输出 unknown / not enough evidence；
+- 不输出“构成侵权”或“完全安全”；
+- 永远附带免责声明：This system is for preliminary IP risk screening only and does not constitute legal advice.
+
+## Listing Rewrite Agent
+`ListingRewriteAgent` 基于风险与证据给出 2-3 条更稳健标题建议，并附 reason：
+- 删除 `style / inspired by / look alike / fake / replica / dupe`；
+- 弱化 `compatible with`；
+- 无授权时降低品牌词在标题核心位置；
+- 避免 `official / authorized / genuine / authentic` 等可能误导词。
+
+## Full Pipeline Demo
+```bash
+python scripts/05_run_demo.py \
+  --title "Phone case compatible with iPhone 15" \
+  --description "Magnetic transparent case for iPhone 15" \
+  --category "phone accessory" \
+  --platform "Temu" \
+  --has_authorization false \
+  --enable_patent_check false \
+  --enable_litigation_check false \
+  --mock_llm true
+```
+
+## `.env` 示例
+```bash
+MOCK_LLM=true
+OPENAI_API_KEY=
+OPENAI_BASE_URL=
+OPENAI_MODEL=
+```
+
+兼容 API 示例：
+- OpenAI Compatible: `OPENAI_BASE_URL=https://api.openai.com/v1`
+- DeepSeek Compatible: `OPENAI_BASE_URL=https://api.deepseek.com/v1`
+- Qwen Compatible: `OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`
+
+即使没有 API Key，也可使用 `MOCK_LLM=true` 跑通全流程。
