@@ -35,6 +35,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--enable_patent_check", default="false")
     p.add_argument("--enable_litigation_check", default="false")
     p.add_argument("--mock_llm", default="true")
+    p.add_argument("--use_reranker", default="false")
     return p.parse_args()
 
 
@@ -86,6 +87,7 @@ def main() -> None:
         routed_intents=routed.get("intents", []),
         enable_patent_check=_to_bool(args.enable_patent_check),
         enable_litigation_check=_to_bool(args.enable_litigation_check),
+        use_reranker=_to_bool(args.use_reranker),
     )
     risk = RiskJudgeAgent().judge(evidence_bundle)
     rewrite = ListingRewriteAgent().rewrite(listing, risk, evidence_bundle)

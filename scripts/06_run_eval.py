@@ -21,6 +21,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--enable_litigation_check", action="store_true")
     p.add_argument("--retrieval_eval_path", default="data/eval/retrieval_eval.jsonl")
     p.add_argument("--risk_eval_path", default="data/eval/risk_eval.jsonl")
+    p.add_argument("--compare_reranker", action="store_true")
+    p.add_argument("--top_k", type=int, default=5)
+    p.add_argument("--rerank_top_k", type=int, default=5)
     return p.parse_args()
 
 
@@ -36,13 +39,17 @@ def main() -> None:
     if not Path(risk_path).exists():
         risk_path = "data/eval/listing_risk_examples.jsonl"
 
-    retrieval = evaluate_retrieval(args.retrieval_eval_path)
-    risk = evaluate_risk(risk_path, enable_patent_check=args.enable_patent_check, enable_litigation_check=args.enable_litigation_check)
+    retrieval = evaluate_retrieval(args.retrieval_eval_path, compare_reranker=args.compare_reranker)
+    risk_no = evaluate_risk(risk_path, use_reranker=False, enable_patent_check=args.enable_patent_check, enable_litigation_check=args.enable_litigation_check)
+    risk = risk_no
+    if args.compare_reranker:
+        risk_with = evaluate_risk(risk_path, use_reranker=True, enable_patent_check=args.enable_patent_check, enable_litigation_check=args.enable_litigation_check)
+        risk = {"no_reranker": risk_no, "with_reranker": risk_with}
     build_markdown_report(retrieval, risk, out_path="reports/evaluation_report.md")
 
     print("Evaluation finished.")
-    print(f"Retrieval metrics: {retrieval['metrics']}")
-    print(f"Risk metrics: {risk['metrics']}")
+    print(f"Retrieval: {retrieval}")
+    print(f"Risk: {risk}")
     print("Report written to reports/evaluation_report.md")
 
 
