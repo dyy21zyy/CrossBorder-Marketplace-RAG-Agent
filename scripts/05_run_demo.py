@@ -17,6 +17,13 @@ from src.agents.query_router_agent import QueryRouter
 from src.agents.risk_judge_agent import RiskJudgeAgent
 from src.schemas import ListingInput
 
+INDEX_HINTS = {
+    "trademark": "python scripts/01_build_trademark_db.py --sample --force_rebuild",
+    "platform_policy": "python scripts/02_build_platform_index.py",
+    "patent_claim": "python scripts/03_build_claim_index.py --sample --limit 50000",
+    "litigation": "python scripts/04_build_litigation_db.py --sample --force_rebuild",
+}
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Run full LLM+RAG screening demo")
@@ -33,6 +40,31 @@ def parse_args() -> argparse.Namespace:
 
 def _to_bool(s: str) -> bool:
     return str(s).strip().lower() in {"1", "true", "yes", "y"}
+
+
+def _print_json_section(title: str, payload: object) -> None:
+    print(f"\n=== {title} ===")
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+def _print_index_hints(evidence_bundle: dict) -> None:
+    missing: list[tuple[str, str]] = []
+    mapping = {
+        "trademark_evidence": "trademark",
+        "platform_policy_evidence": "platform_policy",
+        "patent_claim_evidence": "patent_claim",
+        "litigation_evidence": "litigation",
+    }
+    for key, source in mapping.items():
+        for item in evidence_bundle.get(key, []):
+            if getattr(item, "evidence_type", "") == "system" and "Please run" in getattr(item, "snippet", ""):
+                missing.append((source, INDEX_HINTS[source]))
+                break
+
+    if missing:
+        print("\n=== Missing Index Hints ===")
+        for source, cmd in missing:
+            print(f"- Missing {source} index. Run: {cmd}")
 
 
 def main() -> None:
@@ -59,24 +91,18 @@ def main() -> None:
     rewrite = ListingRewriteAgent().rewrite(listing, risk, evidence_bundle)
     answer = FinalAnswerAgent().generate(listing, evidence_bundle, risk, rewrite)
 
-    print("=== Parsed Listing ===")
-    print(evidence_bundle["parsed_listing"].model_dump_json(indent=2, ensure_ascii=False))
-    print("\n=== Routed Intents ===")
-    print(json.dumps(routed, ensure_ascii=False, indent=2))
-    print("\n=== Evidence Summary ===")
-    summary = {
-        "trademark": len(evidence_bundle.get("trademark_evidence", [])),
-        "platform": len(evidence_bundle.get("platform_policy_evidence", [])),
-        "patent_claim": len(evidence_bundle.get("patent_claim_evidence", [])),
-        "litigation": len(evidence_bundle.get("litigation_evidence", [])),
-    }
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
-    print("\n=== Risk Results ===")
-    print(json.dumps(risk, ensure_ascii=False, indent=2))
-    print("\n=== Rewrite Suggestions ===")
-    print(json.dumps(rewrite, ensure_ascii=False, indent=2))
-    print("\n=== Final Answer ===")
-    print(answer.model_dump_json(indent=2, ensure_ascii=False))
+    _print_json_section("Parsed Listing", evidence_bundle["parsed_listing"].model_dump())
+    _print_json_section("Routed Intents", routed)
+    _print_json_section("Trademark Matches", [x.model_dump() for x in evidence_bundle.get("trademark_matches", [])])
+    _print_json_section("Platform Policy Evidence", [x.model_dump() for x in evidence_bundle.get("platform_policy_evidence", [])])
+    _print_json_section("Patent Claim Evidence", [x.model_dump() for x in evidence_bundle.get("patent_claim_evidence", [])])
+    _print_json_section("Litigation Evidence", [x.model_dump() for x in evidence_bundle.get("litigation_evidence", [])])
+    _print_json_section("Risk Results", risk)
+    _print_json_section("Listing Rewrite Suggestions", rewrite)
+    _print_json_section("Final Answer", answer.model_dump())
+    _print_json_section("Disclaimer", {"disclaimer": answer.disclaimers[0] if answer.disclaimers else ""})
+
+    _print_index_hints(evidence_bundle)
 
 
 if __name__ == "__main__":
