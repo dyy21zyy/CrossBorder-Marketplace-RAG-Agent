@@ -1,24 +1,29 @@
 from __future__ import annotations
+import json
 from pathlib import Path
 from typing import Any
 
-def _row(m):
-    return f"| {m['module']} | {m['recall_at_5']:.3f} | {m['precision_at_5']:.3f} | {m['mrr']:.3f} | {m['avg_context_relevance']:.3f} | {m['avg_latency_sec']:.3f} |"
+def save_json(path:str,data:dict[str,Any]):
+    Path(path).parent.mkdir(parents=True,exist_ok=True)
+    Path(path).write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8')
 
-def build_markdown_report(retrieval_result: dict[str, Any], risk_result: dict[str, Any], out_path: str = "reports/evaluation_report.md") -> str:
-    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-    lines=["# Evaluation Report","","## Retrieval Evaluation","","### Without Reranker","| module | Recall@5 | Precision@5 | MRR | Context Relevance | Avg Latency |","|---|---:|---:|---:|---:|---:|"]
-    for m in retrieval_result.get('no_reranker',[]): lines.append(_row(m))
-    if retrieval_result.get('with_reranker'):
-        lines += ["","### With Reranker","| module | Recall@5 | Precision@5 | MRR | Context Relevance | Avg Latency |","|---|---:|---:|---:|---:|---:|"]
-        for m in retrieval_result.get('with_reranker',[]): lines.append(_row(m))
-        lines += ["","### Reranker Improvement","| module | Recall@5 Δ | Precision@5 Δ | MRR Δ | Context Relevance Δ | Latency Δ |","|---|---:|---:|---:|---:|---:|"]
-        for d in retrieval_result.get('improvement',[]): lines.append(f"| {d['module']} | {d['recall_at_5_delta']:.3f} | {d['precision_at_5_delta']:.3f} | {d['mrr_delta']:.3f} | {d['context_relevance_delta']:.3f} | {d['latency_delta']:.3f} |")
-    lines += ["","## Risk Evaluation"]
-    rn=risk_result.get('no_reranker',risk_result)
-    lines += ["","### Without Reranker","| module | Accuracy | High-risk Recall | Citation Coverage | Unsupported Claim Rate |","|---|---:|---:|---:|---:|",f"| overall | {rn['metrics']['overall_risk_accuracy']:.3f} | {rn['metrics']['high_risk_recall']:.3f} | {rn['metrics']['citation_coverage']:.3f} | {rn['metrics']['unsupported_claim_rate']:.3f} |"]
-    rw=risk_result.get('with_reranker')
-    if rw:
-        lines += ["","### With Reranker","| module | Accuracy | High-risk Recall | Citation Coverage | Unsupported Claim Rate |","|---|---:|---:|---:|---:|",f"| overall | {rw['metrics']['overall_risk_accuracy']:.3f} | {rw['metrics']['high_risk_recall']:.3f} | {rw['metrics']['citation_coverage']:.3f} | {rw['metrics']['unsupported_claim_rate']:.3f} |"]
-    lines += ["","### Summary","- Reranker may improve ranking quality while increasing latency."]
-    text='\n'.join(lines)+'\n'; Path(out_path).write_text(text,encoding='utf-8'); return text
+def build_markdown_report(retrieval_result:dict[str,Any]|None,risk_result:dict[str,Any]|None,response_result:dict[str,Any]|None,out_path='reports/evaluation_report.md')->str:
+    lines=['# Evaluation Report','',"Results are based on sample data and are intended for demonstration.",'', '## 1. Retrieval Evaluation','', '### Context Relevance Metrics','| module | Precision@5 | Recall@5 | F1@5 | MRR | MAP | Context Relevance | Avg Latency |','|---|---:|---:|---:|---:|---:|---:|---:|']
+    if retrieval_result:
+        for m in retrieval_result.get('no_reranker',{}).get('by_module',[]):
+            lines.append(f"| {m['module']} | {m['precision_at_k']:.3f} | {m['recall_at_k']:.3f} | {m['f1_at_k']:.3f} | {m['mrr']:.3f} | {m['map']:.3f} | {m['context_relevance']:.3f} | {m['avg_latency_sec']:.3f} |")
+        if retrieval_result.get('reranker_ablation'):
+            lines += ['', '### Reranker Ablation','| module | Recall@5 No Reranker | Recall@5 With Reranker | Δ Recall | Δ MRR | Δ Latency |','|---|---:|---:|---:|---:|---:|']
+            for d in retrieval_result['reranker_ablation']:
+                lines.append(f"| {d['module']} | {d.get('recall_at_5_no_reranker',0):.3f} | {d.get('recall_at_5_with_reranker',0):.3f} | {d.get('recall_at_5_delta',0):.3f} | {d.get('mrr_delta',0):.3f} | {d.get('latency_delta',0):.3f} |")
+    lines += ['', '## 2. Risk Evaluation','| risk type | Accuracy | High-risk Recall | Unknown Handling | False Positive Rate | False Negative Rate |','|---|---:|---:|---:|---:|---:|']
+    if risk_result:
+        m = risk_result.get('no_reranker',risk_result).get('metrics',{})
+        for d in ['trademark_risk','platform_policy_risk','patent_claim_risk','litigation_risk']:
+            lines.append(f"| {d} | {m.get(d+'_accuracy',0):.3f} | {m.get(d+'_high_risk_recall',0):.3f} | {m.get(d+'_unknown_handling_accuracy',0):.3f} | {m.get(d+'_false_positive_rate',0):.3f} | {m.get(d+'_false_negative_rate',0):.3f} |")
+    lines += ['', '## 3. Response Evaluation','| Faithfulness | Answer Relevance | Unsupported Claim Rate | Citation Coverage | Disclaimer Coverage | Forbidden Claim Rate |','|---:|---:|---:|---:|---:|---:|']
+    if response_result:
+        rm=response_result.get('metrics',{})
+        lines.append(f"| {rm.get('faithfulness',0):.3f} | {rm.get('answer_relevance',0):.3f} | {rm.get('unsupported_claim_rate',0):.3f} | {rm.get('citation_coverage',0):.3f} | {rm.get('disclaimer_coverage',0):.3f} | {rm.get('forbidden_claim_rate',0):.3f} |")
+    lines += ['', '## 4. Failure Cases','- 检索失败样例：见 retrieval per_query 中 recall_at_k=0 的条目。','- 风险误判样例：见 risk per_sample 中 expected != predicted 的条目。','- unsupported 样例：见 response per_sample 中 unsupported_claim_rate>0 的条目。','', '## 5. Summary','- 检索瓶颈优先看低 recall 模块。','- Reranker 提升需结合 latency 一起判断。','- 风险判断可能偏保守，unknown 样例需人工复核。','- 生成回答应持续降低 unsupported claim 风险。']
+    text='\n'.join(lines)+'\n'; Path(out_path).parent.mkdir(parents=True,exist_ok=True); Path(out_path).write_text(text,encoding='utf-8'); return text
