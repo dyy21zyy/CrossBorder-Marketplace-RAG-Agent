@@ -181,3 +181,21 @@ python scripts/02_build_platform_index.py
 在 `scripts/05_run_demo.py` 中，当商标风险被判定为 `high/medium` 时，系统会自动发起 Temu Policy 检索：
 - query: `Temu intellectual property trademark infringement report enforcement`
 - 输出 `platform_policy_evidence`，并显示 `source / section / page / chunk_text`。
+
+## Patent Claim-level RAG（Claim Grouping First）
+专利文本**不能按普通 token 随机切块**。侵权风险初筛的核心证据单位是 Claims，尤其是 Independent Claim。Dependent Claim 必须与其引用的 Independent Claim 合并为 claim group，再进入检索。
+
+### Claim Group 规则
+- 按 `pat_no/patent_id` 分组。
+- `ind_flg` 为 `1/true/y`，或依赖关系为空时，优先判定为独立权利要求。
+- 从属权利要求会解析 `dependencies` 和文本中的 `claim 1`、`claims 1-3` 等引用。
+- 若依赖关系无法解析，则回退合并到最近的前序独立权利要求。
+- 若某专利不存在可识别独立权利要求，则每条 claim 独立成组作为 fallback。
+
+### 索引与检索
+- 构建脚本：`python scripts/03_build_claim_index.py --sample --limit 50000`
+- 支持 `--sample/--full/--limit/--batch_size/--resume/--force_rebuild`
+- 当前 MVP 使用本地 Chroma + BM25 + RRF；后续可平滑替换为 Qdrant/Milvus。
+
+### 合规声明
+本模块仅用于专利风险初筛。系统输出为“发现相关权利要求，需要人工核验”，不构成专利侵权认定或法律意见。

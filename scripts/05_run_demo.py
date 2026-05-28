@@ -15,6 +15,7 @@ from src.retrieval.evidence_formatter import format_trademark_evidence
 from src.retrieval.trademark_retriever import TrademarkRetriever
 from src.retrieval.platform_retriever import PlatformPolicyRetriever
 from src.schemas import ListingInput
+from src.retrieval.claim_retriever import ClaimRetriever
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,11 +26,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--platform", default="")
     parser.add_argument("--has_authorization", default="false")
     parser.add_argument("--db_path", default="indexes/duckdb/trademark.duckdb")
+    parser.add_argument("--enable_patent_check", default="false")
     return parser.parse_args()
 
 
 def _to_bool(s: str) -> bool:
     return str(s).strip().lower() in {"1", "true", "yes", "y"}
+
+
+def _extract_patent_query_terms(title: str, description: str) -> str:
+    text = f"{title} {description}".lower()
+    words = [w.strip(",.;:()[]{}") for w in text.split()]
+    terms = [w for w in words if len(w) > 3]
+    return " ".join(terms[:25])
 
 
 def main() -> None:
@@ -81,6 +90,24 @@ def main() -> None:
         ]
         print("\n=== Platform policy evidence ===")
         print(json.dumps(policy_output, ensure_ascii=False, indent=2))
+
+    if _to_bool(args.enable_patent_check):
+        query = _extract_patent_query_terms(args.title, args.description)
+        try:
+            claim_retriever = ClaimRetriever()
+            claim_hits = claim_retriever.hybrid_search(query, top_k=5)
+        except Exception as exc:  # noqa: BLE001
+            claim_hits = [{"error": str(exc)}]
+
+        patent_claim_risk = {
+            "risk_type": "patent_claim",
+            "note": "发现相关权利要求，需要人工核验；本结果不构成法律意见。",
+            "query": query,
+            "retrieval_count": len(claim_hits),
+            "evidence": claim_hits,
+        }
+        print("\n=== Patent claim risk (screening) ===")
+        print(json.dumps(patent_claim_risk, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
