@@ -156,3 +156,28 @@ python scripts/05_run_demo.py --title "Phone case compatible with iPhone 15" --d
 ```
 
 若缺少数据库，Demo 会提示先执行上述构建命令。
+
+## Temu IP Policy Hybrid RAG（非结构化/半结构化）
+Temu IP Policy 属于规则文档，不是关系表结构，因此不适合走 Trademark 的 DuckDB Structured RAG。
+这里采用 **Hybrid RAG**：
+- 按页面读取 PDF（优先 `data/raw/platform/temu_ip_policy.pdf`，不存在则 fallback `data/sample/platform/temu_ip_policy.pdf`）；
+- 做 **section-aware chunking**（按 trademark/copyright/patent/report infringement/counter notice/enforcement/repeat infringement/general 分段）；
+- 同时构建：
+  - Chroma 向量索引（语义召回）
+  - BM25 关键词索引（精确词召回）
+- 查询时用 **RRF** 融合两个排序结果，提升召回稳定性与可解释性。
+
+### 构建 Temu Policy 索引
+```bash
+python scripts/02_build_platform_index.py
+```
+
+构建产物：
+- `data/processed/platform/platform_chunks.jsonl`
+- `indexes/chroma_platform/`
+- `indexes/bm25_platform/bm25_platform.pkl`
+
+### Demo 中自动触发平台政策检索
+在 `scripts/05_run_demo.py` 中，当商标风险被判定为 `high/medium` 时，系统会自动发起 Temu Policy 检索：
+- query: `Temu intellectual property trademark infringement report enforcement`
+- 输出 `platform_policy_evidence`，并显示 `source / section / page / chunk_text`。
