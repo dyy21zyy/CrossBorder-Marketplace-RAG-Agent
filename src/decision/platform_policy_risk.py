@@ -1,10 +1,13 @@
-"""platform_policy_risk module for CrossBorder Marketplace RAG Agent.
+from __future__ import annotations
 
-TODO: implement platform_policy_risk functionality.
-"""
+from src.schemas import EvidenceItem
 
-# TODO: add concrete implementation.
 
-def placeholder() -> None:
-    """Minimal importable placeholder function."""
-    return None
+def assess_platform_policy_risk(evidences: list[EvidenceItem]) -> dict[str, object]:
+    if not evidences:
+        return {"risk_type": "platform_policy", "risk_level": "unknown", "reason": "No Temu IP Policy evidence retrieved."}
+    return {
+        "risk_type": "platform_policy",
+        "risk_level": "medium",
+        "reason": "Temu IP Policy evidence matched; platform compliance review needed.",
+    }
