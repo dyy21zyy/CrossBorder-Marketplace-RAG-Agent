@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import pickle
 from pathlib import Path
 from typing import Any
 
 from rank_bm25 import BM25Okapi
+
+logger = logging.getLogger(__name__)
 
 
 def _tokenize(text: str) -> list[str]:
@@ -14,6 +17,7 @@ def _tokenize(text: str) -> list[str]:
 
 
 def build_bm25_index(documents: list[dict[str, Any]], output_path: str) -> None:
+    logger.info("Building BM25 index for %d documents", len(documents))
     corpus_tokens = [_tokenize(d.get("text", "")) for d in documents]
     bm25 = BM25Okapi(corpus_tokens)
     payload = {"bm25": bm25, "documents": documents}
@@ -21,6 +25,7 @@ def build_bm25_index(documents: list[dict[str, Any]], output_path: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("wb") as f:
         pickle.dump(payload, f)
+    logger.info("BM25 index written: %s", output_path)
 
 
 def load_bm25_index(path: str) -> dict[str, Any]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -18,13 +19,19 @@ def parse_args() -> argparse.Namespace:
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--sample", action="store_true")
     mode.add_argument("--full", action="store_true")
+    p.add_argument("--limit", type=int, default=None, help="not applicable for DuckDB table build; reserved for interface consistency")
+    p.add_argument("--batch_size", type=int, default=None, help="not applicable for DuckDB read_csv_auto load; reserved for interface consistency")
+    p.add_argument("--resume", action="store_true", help="not applicable for idempotent DuckDB build; reserved for interface consistency")
     p.add_argument("--force_rebuild", action="store_true")
     p.add_argument("--db_path", default="indexes/duckdb/litigation.duckdb")
     return p.parse_args()
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     args = parse_args()
+    if args.limit is not None or args.batch_size is not None or args.resume:
+        logging.info("--limit/--batch_size/--resume are not applicable for litigation DuckDB build; arguments are ignored")
     mode = "sample" if args.sample else "full" if args.full else None
     _, files = resolve_litigation_files(mode=mode)
 
@@ -45,7 +52,7 @@ def main() -> None:
         "patent_litigation_summary",
     ]:
         cnt = int(store.query(f"SELECT COUNT(*) AS c FROM {table}").iloc[0]["c"])
-        print(f"{table}: {cnt}")
+        logging.info("%s: %s", table, cnt)
 
 
 if __name__ == "__main__":

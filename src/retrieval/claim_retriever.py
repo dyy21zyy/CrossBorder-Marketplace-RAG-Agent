@@ -37,9 +37,15 @@ class ClaimRetriever:
             )
         return docs
 
-    def build_indexes(self, claim_groups: list[ClaimGroup]) -> None:
+    def build_indexes(self, claim_groups: list[ClaimGroup], *, batch_size: int = 1024, force_rebuild: bool = False) -> None:
         docs = self.build_claim_documents(claim_groups)
-        self.collection = build_chroma_index(docs, persist_dir=self.chroma_dir, collection_name=self.collection_name)
+        self.collection = build_chroma_index(
+            docs,
+            persist_dir=self.chroma_dir,
+            collection_name=self.collection_name,
+            batch_size=batch_size,
+            reset=force_rebuild,
+        )
         Path(self.bm25_path).parent.mkdir(parents=True, exist_ok=True)
         build_bm25_index(docs, self.bm25_path)
         self.bm25_data = load_bm25_index(self.bm25_path)

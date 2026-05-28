@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -9,28 +10,38 @@ import chromadb
 
 from src.indexing.embeddings import load_embedding_model
 
+logger = logging.getLogger(__name__)
+
 
 class _CollectionWrapper:
     def __init__(self, collection: Any) -> None:
         self.collection = collection
 
 
-def build_chroma_index(documents: list[dict[str, Any]], persist_dir: str, collection_name: str) -> _CollectionWrapper:
+def _batch_iter(seq: list[dict[str, Any]], batch_size: int) -> list[list[dict[str, Any]]]:
+    for i in range(0, len(seq), batch_size):
+        yield seq[i:i + batch_size]
+
+
+def build_chroma_index(documents: list[dict[str, Any]], persist_dir: str, collection_name: str, *, batch_size: int = 1024, reset: bool = True) -> _CollectionWrapper:
+    logger.info("Building Chroma index: docs=%d, batch_size=%d, reset=%s", len(documents), batch_size, reset)
     Path(persist_dir).mkdir(parents=True, exist_ok=True)
     client = chromadb.PersistentClient(path=persist_dir)
-    try:
-        client.delete_collection(collection_name)
-    except Exception:  # noqa: BLE001
-        pass
+    if reset:
+        try:
+            client.delete_collection(collection_name)
+        except Exception:  # noqa: BLE001
+            pass
     collection = client.get_or_create_collection(name=collection_name)
 
     model = load_embedding_model()
-    texts = [d.get("text", "") for d in documents]
-    embeddings = model.encode(texts, normalize_embeddings=True).tolist()
-    ids = [str(d.get("chunk_id", f"chunk_{i}")) for i, d in enumerate(documents)]
-    metadatas = [{k: v for k, v in d.items() if k != "text"} for d in documents]
-
-    collection.add(ids=ids, documents=texts, embeddings=embeddings, metadatas=metadatas)
+    for base_idx, batch in enumerate(_batch_iter(documents, max(1, batch_size))):
+        texts = [d.get("text", "") for d in batch]
+        embeddings = model.encode(texts, normalize_embeddings=True).tolist()
+        ids = [str(d.get("chunk_id", f"chunk_{base_idx}_{i}")) for i, d in enumerate(batch)]
+        metadatas = [{k: v for k, v in d.items() if k != "text"} for d in batch]
+        collection.add(ids=ids, documents=texts, embeddings=embeddings, metadatas=metadatas)
+        logger.info("Chroma batch added: %d documents", len(batch))
     return _CollectionWrapper(collection)
 
 

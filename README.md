@@ -35,6 +35,24 @@ Used for:
 - Must be evidence-grounded
 - Never outputs legal conclusion
 
+## Full-scale Notes
+- Chroma is a local MVP baseline for single-node development.
+- For production full-scale, replace vector backend with Qdrant / Milvus / Elasticsearch / OpenSearch.
+- Keep retriever interfaces stable so backend can be swapped without changing business logic.
+
+## Build Commands (Sample vs Full)
+```bash
+# Sample mode
+python scripts/01_build_trademark_db.py --sample --force_rebuild
+python scripts/04_build_litigation_db.py --sample --force_rebuild
+python scripts/03_build_claim_index.py --sample --limit 50000 --batch_size 2000 --resume
+
+# Full mode
+python scripts/01_build_trademark_db.py --full
+python scripts/04_build_litigation_db.py --full
+python scripts/03_build_claim_index.py --full --batch_size 50000 --resume
+```
+
 ## Sample Data Generation
 ```bash
 python scripts/make_sample_data_local.py
@@ -67,7 +85,7 @@ python scripts/02_build_platform_index.py
 
 ## Build Claim Index
 ```bash
-python scripts/03_build_claim_index.py --sample --limit 50000
+python scripts/03_build_claim_index.py --sample --limit 50000 --batch_size 2000 --resume
 ```
 
 ## Build Litigation DB
