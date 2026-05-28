@@ -226,3 +226,11 @@ python scripts/04_build_litigation_db.py --sample --force_rebuild
 - `--sample`：强制使用 sample 数据；
 - `--full`：强制使用 raw 数据；
 - `--force_rebuild`：重建原始表与衍生表。
+
+## LLM + RAG Pipeline
+本项目采用“检索优先、LLM 兜底”的多源流程：
+- DuckDB / Chroma / BM25 / RRF 负责证据检索与召回；
+- Rule Engine 负责稳定初步风险判断；
+- LLM 仅用于复杂路由兜底、冲突判断和最终解释生成；
+- LLM 不直接读取原始 CSV；
+- LLM 不能脱离 evidence 做法律结论。

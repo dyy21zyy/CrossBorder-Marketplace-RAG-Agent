@@ -1,10 +1,17 @@
-"""patent_claim_risk module for CrossBorder Marketplace RAG Agent.
+from __future__ import annotations
 
-TODO: implement patent_claim_risk functionality.
-"""
+from src.schemas import EvidenceItem
 
-# TODO: add concrete implementation.
 
-def placeholder() -> None:
-    """Minimal importable placeholder function."""
-    return None
+def assess_patent_claim_risk(evidences: list[EvidenceItem]) -> dict[str, object]:
+    if not evidences:
+        return {
+            "risk_type": "patent_claim",
+            "risk_level": "unknown",
+            "reason": "No relevant claim group evidence retrieved.",
+        }
+    return {
+        "risk_type": "patent_claim",
+        "risk_level": "medium",
+        "reason": "Relevant claim groups were retrieved; this indicates technical overlap only, not infringement.",
+    }
