@@ -199,3 +199,30 @@ python scripts/02_build_platform_index.py
 
 ### 合规声明
 本模块仅用于专利风险初筛。系统输出为“发现相关权利要求，需要人工核验”，不构成专利侵权认定或法律意见。
+
+## Patent Litigation Structured RAG（DuckDB）
+Patent Litigation Docket Reports Data 属于案件结构化数据，**不作为普通文本 chunk 向量化**。当前实现采用 DuckDB Structured RAG 路线：
+- `patent -> case_row_id -> cases -> names` 进行结构化关联；
+- 优先读取 `data/raw/litigation/`，不存在时 fallback 到 `data/sample/litigation/`；
+- 第一版仅接入 `cases(.csv/_sample.csv)`、`patents(...)`、`names(...)`；
+- `documents.csv / attorneys.csv / pacer_cases.csv` 暂作为 future work，不进入核心流程。
+
+### 连接键自动识别
+不同源文件的案件键可能不同，系统会自动识别以下字段作为案件连接键：
+- `case_row_id`
+- `case_row`
+- `case_id`
+- `caseid`
+- `case_rowid`
+
+并统一规范化后用于关联，避免把 `party_row_count` 误当作案件键。
+
+### 构建命令
+```bash
+python scripts/04_build_litigation_db.py --sample --force_rebuild
+```
+
+支持参数：
+- `--sample`：强制使用 sample 数据；
+- `--full`：强制使用 raw 数据；
+- `--force_rebuild`：重建原始表与衍生表。
