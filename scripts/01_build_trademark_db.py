@@ -18,6 +18,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build USPTO trademark structured DuckDB")
     parser.add_argument("--sample", action="store_true", help="force sample mode")
     parser.add_argument("--full", action="store_true", help="force full/raw mode")
+    parser.add_argument("--limit", type=int, default=None, help="not applicable for DuckDB table build; reserved for interface consistency")
+    parser.add_argument("--batch_size", type=int, default=None, help="not applicable for DuckDB read_csv_auto load; reserved for interface consistency")
+    parser.add_argument("--resume", action="store_true", help="not applicable for idempotent DuckDB build; reserved for interface consistency")
     parser.add_argument("--force_rebuild", action="store_true", help="drop and rebuild tables")
     return parser.parse_args()
 
@@ -35,6 +38,8 @@ def _mode_from_args(args: argparse.Namespace) -> str | None:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     args = parse_args()
+    if args.limit is not None or args.batch_size is not None or args.resume:
+        logging.info("--limit/--batch_size/--resume are not applicable for trademark DuckDB build; arguments are ignored")
     mode = _mode_from_args(args)
 
     store = DuckDBStore("indexes/duckdb/trademark.duckdb")
