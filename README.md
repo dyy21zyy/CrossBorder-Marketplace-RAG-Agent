@@ -139,3 +139,20 @@ python scripts/01_build_trademark_db.py --sample --force_rebuild
 2. 导入 Trademark 原始 CSV（优先 `data/raw/trademark`，不存在时回退 `data/sample/trademark`）；
 3. 构建轻量检索表并创建索引；
 4. 打印各表行数。
+
+## Trademark 风险筛查 Demo（Structured RAG + Rule Engine）
+> 当前阶段仅执行结构化检索与规则判断，不调用 LLM，不输出法律结论。
+
+先确保 DuckDB 已构建：
+
+```bash
+python scripts/01_build_trademark_db.py --sample --force_rebuild
+```
+
+再运行 Demo：
+
+```bash
+python scripts/05_run_demo.py --title "Phone case compatible with iPhone 15" --description "Magnetic transparent case for iPhone 15" --category "phone accessory" --platform "Temu" --has_authorization false
+```
+
+若缺少数据库，Demo 会提示先执行上述构建命令。

@@ -18,8 +18,15 @@ class ListingInput(BaseModel):
 class ParsedListing(BaseModel):
     normalized_title: str
     normalized_description: str
+    title: str = ""
+    description: str = ""
+    category: str = ""
+    platform: str = ""
+    has_authorization: bool = False
+    candidate_brand_terms: list[str] = Field(default_factory=list)
     brand_terms: list[str] = Field(default_factory=list)
     product_terms: list[str] = Field(default_factory=list)
+    risk_patterns: list[str] = Field(default_factory=list)
     inferred_category: str = ""
 
 
@@ -34,8 +41,17 @@ class EvidenceItem(BaseModel):
 
 
 class TrademarkMatch(BaseModel):
-    mark: str
+    term: str = ""
+    serial_no: str = ""
+    mark_id_char: str = ""
+    registration_no: str = ""
     status: str = ""
+    owners: list[str] = Field(default_factory=list)
+    intl_classes: list[str] = Field(default_factory=list)
+    statements: list[str] = Field(default_factory=list)
+    match_type: str = ""
+    match_score: float = 0.0
+    mark: str = ""
     owner: str = ""
     serial_number: str = ""
     registration_number: str = ""
