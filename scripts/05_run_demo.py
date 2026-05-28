@@ -16,6 +16,8 @@ from src.retrieval.trademark_retriever import TrademarkRetriever
 from src.retrieval.platform_retriever import PlatformPolicyRetriever
 from src.schemas import ListingInput
 from src.retrieval.claim_retriever import ClaimRetriever
+from src.decision.litigation_risk import assess_litigation_risk
+from src.retrieval.litigation_retriever import LitigationRetriever
 
 
 def parse_args() -> argparse.Namespace:
@@ -27,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--has_authorization", default="false")
     parser.add_argument("--db_path", default="indexes/duckdb/trademark.duckdb")
     parser.add_argument("--enable_patent_check", default="false")
+    parser.add_argument("--enable_litigation_check", default="false")
     return parser.parse_args()
 
 
@@ -108,6 +111,24 @@ def main() -> None:
         }
         print("\n=== Patent claim risk (screening) ===")
         print(json.dumps(patent_claim_risk, ensure_ascii=False, indent=2))
+
+        patent_ids = []
+        for hit in claim_hits:
+            pid = str(hit.get("patent_id", "")).strip() if isinstance(hit, dict) else ""
+            if pid:
+                patent_ids.append(pid)
+
+        if _to_bool(args.enable_litigation_check) and patent_ids:
+            litigation = assess_litigation_risk(patent_ids=sorted(set(patent_ids)), retriever=LitigationRetriever())
+            party_evidence = []
+            lr = LitigationRetriever()
+            for pid in sorted(set(patent_ids)):
+                rows = lr.get_litigation_by_patent(pid)[:20]
+                party_evidence.append({"patent_id": pid, "cases": rows})
+            print("\n=== Patent litigation summary (structured) ===")
+            print(json.dumps(litigation, ensure_ascii=False, indent=2))
+            print("\n=== Patent litigation party evidence ===")
+            print(json.dumps(party_evidence, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
