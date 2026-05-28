@@ -1,57 +1,30 @@
 from __future__ import annotations
-
-import argparse
-import os
-import sys
+import argparse, os, sys
 from pathlib import Path
-
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-from src.evaluation.report import build_markdown_report
+if str(ROOT) not in sys.path: sys.path.insert(0,str(ROOT))
 from src.evaluation.retrieval_eval import evaluate_retrieval
 from src.evaluation.risk_eval import evaluate_risk
+from src.evaluation.response_eval import evaluate_response
+from src.evaluation.report import build_markdown_report, save_json
 
-
-def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Run retrieval + risk evaluation")
-    p.add_argument("--mock_llm", default="true")
-    p.add_argument("--enable_patent_check", action="store_true")
-    p.add_argument("--enable_litigation_check", action="store_true")
-    p.add_argument("--retrieval_eval_path", default="data/eval/retrieval_eval.jsonl")
-    p.add_argument("--risk_eval_path", default="data/eval/risk_eval.jsonl")
-    p.add_argument("--compare_reranker", action="store_true")
-    p.add_argument("--top_k", type=int, default=5)
-    p.add_argument("--rerank_top_k", type=int, default=5)
+def parse_args():
+    p=argparse.ArgumentParser()
+    p.add_argument('--retrieval',action='store_true'); p.add_argument('--risk',action='store_true'); p.add_argument('--response',action='store_true'); p.add_argument('--all',action='store_true')
+    p.add_argument('--compare_reranker',action='store_true'); p.add_argument('--mock_llm',default='true'); p.add_argument('--top_k',type=int,default=5); p.add_argument('--rerank_top_k',type=int,default=10); p.add_argument('--use_llm_judge',action='store_true')
     return p.parse_args()
 
-
-def _to_bool(v: str) -> bool:
-    return str(v).strip().lower() in {"1", "true", "yes", "y"}
-
-
-def main() -> None:
-    args = parse_args()
-    os.environ["MOCK_LLM"] = "true" if _to_bool(args.mock_llm) else "false"
-
-    risk_path = args.risk_eval_path
-    if not Path(risk_path).exists():
-        risk_path = "data/eval/listing_risk_examples.jsonl"
-
-    retrieval = evaluate_retrieval(args.retrieval_eval_path, compare_reranker=args.compare_reranker)
-    risk_no = evaluate_risk(risk_path, use_reranker=False, enable_patent_check=args.enable_patent_check, enable_litigation_check=args.enable_litigation_check)
-    risk = risk_no
-    if args.compare_reranker:
-        risk_with = evaluate_risk(risk_path, use_reranker=True, enable_patent_check=args.enable_patent_check, enable_litigation_check=args.enable_litigation_check)
-        risk = {"no_reranker": risk_no, "with_reranker": risk_with}
-    build_markdown_report(retrieval, risk, out_path="reports/evaluation_report.md")
-
-    print("Evaluation finished.")
-    print(f"Retrieval: {retrieval}")
-    print(f"Risk: {risk}")
-    print("Report written to reports/evaluation_report.md")
-
-
-if __name__ == "__main__":
-    main()
+def main():
+    a=parse_args(); os.environ['MOCK_LLM']='true' if str(a.mock_llm).lower() in {'1','true','yes','y'} else 'false'
+    if not any([a.retrieval,a.risk,a.response,a.all]): a.all=True
+    retrieval=risk=response=None
+    if a.all or a.retrieval: retrieval=evaluate_retrieval(compare_reranker=a.compare_reranker, top_k=a.top_k, rerank_top_k=a.rerank_top_k); save_json('reports/retrieval_eval_results.json',retrieval)
+    if a.all or a.risk:
+        no=evaluate_risk(use_reranker=False)
+        risk={'no_reranker':no}
+        if a.compare_reranker: risk['with_reranker']=evaluate_risk(use_reranker=True)
+        save_json('reports/risk_eval_results.json',risk)
+    if a.all or a.response: response=evaluate_response(); save_json('reports/response_eval_results.json',response)
+    build_markdown_report(retrieval,risk,response)
+    print('Evaluation finished.')
+if __name__=='__main__': main()

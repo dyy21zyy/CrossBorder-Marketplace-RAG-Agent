@@ -154,3 +154,48 @@ python scripts/06_run_eval.py --compare_reranker --mock_llm true
 - 如果本地无法下载 BAAI/bge-reranker-base，可以设置 `HF_ENDPOINT=https://hf-mirror.com`；
 - 或者先关闭 `use_reranker`；
 - sample 数据结果只用于 demo，不代表全量数据最终效果。
+
+## Evaluation
+
+本项目采用三层评估：
+
+1. Retrieval Evaluation / Context Relevance
+- Precision@K
+- Recall@K
+- F1@K
+- MRR
+- MAP
+- Context Relevance
+
+2. Risk Evaluation
+- Risk Label Accuracy
+- High-risk Recall
+- Unknown Handling Accuracy
+- False Positive Rate
+- False Negative Rate
+
+3. Response Evaluation
+- Faithfulness / Groundedness
+- Answer Relevance
+- Unsupported Claim Rate
+- Citation Coverage
+- Disclaimer Coverage
+
+## Reranker Ablation Study
+
+比较以下两种配置：
+- Hybrid Retrieval without Reranker
+- Hybrid Retrieval with Reranker
+
+运行命令：
+
+```bash
+python scripts/06_run_eval.py --retrieval --compare_reranker --mock_llm true
+```
+
+## LLM-as-Judge Optional Evaluation
+
+- 默认使用 rule-based evaluation；
+- 可选启用 LLM Judge 接口；
+- LLM Judge 有额外成本且存在评估偏差；
+- LLM Judge 不应作为唯一评估依据。
