@@ -23,9 +23,14 @@ def format_trademark_evidence(item: dict[str, Any]) -> dict[str, Any]:
     evidence = _base_evidence("trademark", item)
     evidence["metadata"] = {
         **(evidence.get("metadata") or {}),
-        "mark": item.get("mark"),
+        "source_type": "trademark",
+        "source_table": "trademark_case / trademark_owner / trademark_class / trademark_statement",
+        "serial_no": item.get("serial_no") or item.get("serial_number"),
+        "mark": item.get("mark") or item.get("mark_id_char"),
+        "owner": item.get("owner") or item.get("owners"),
+        "intl_class": item.get("intl_class") or item.get("intl_classes") or item.get("classes"),
+        "statement_snippets": item.get("statement_snippets") or item.get("statements"),
         "status": item.get("status"),
-        "owner": item.get("owner"),
     }
     return evidence
 
