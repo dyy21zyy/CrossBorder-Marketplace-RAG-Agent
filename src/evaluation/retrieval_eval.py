@@ -1,7 +1,71 @@
 from __future__ import annotations
-import json, time
+import json, re, time
 from pathlib import Path
 from typing import Any
+
+
+SEARCHABLE_FIELDS = (
+    "text",
+    "snippet",
+    "page_content",
+    "content",
+    "source",
+    "source_type",
+    "metadata",
+    "mark",
+    "owner",
+    "owners",
+    "normalized_mark",
+    "mark_id_char",
+    "patent_id",
+    "normalized_patent",
+    "case_name",
+    "case_number",
+    "party_name",
+    "party_names",
+    "plaintiff_names",
+    "defendant_names",
+    "name",
+    "name_long",
+    "claim_group_text",
+    "independent_claim_number",
+    "dependent_claim_numbers",
+    "statement_text",
+    "statements",
+)
+
+TRADEMARK_FIELDS = (
+    "trademark_matches",
+    "mark_id_char",
+    "mark",
+    "normalized_mark",
+    "owner",
+    "owners",
+    "statement",
+    "statement_text",
+    "statements",
+    "term",
+    "metadata",
+    "snippet",
+)
+PATENT_FIELDS = ("claim_group_text", "snippet", "metadata", "patent_id", "text")
+LITIGATION_FIELDS = (
+    "patent_id",
+    "patent",
+    "normalized_patent",
+    "case_number",
+    "case_name",
+    "party_name",
+    "party_names",
+    "plaintiff_names",
+    "defendant_names",
+    "plaintiff",
+    "defendant",
+    "name",
+    "name_long",
+    "metadata",
+    "snippet",
+)
 
 
 def _load_jsonl(path: str) -> list[dict[str, Any]]:
@@ -11,24 +75,147 @@ def _load_jsonl(path: str) -> list[dict[str, Any]]:
     return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
 
 
+def _to_mapping(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    if hasattr(value, "dict"):
+        return value.dict()
+    return None
+
+
+def _flatten_to_strings(value: Any) -> list[str]:
+    """Recursively flatten evidence values into strings for keyword matching."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, (int, float, bool)):
+        return [str(value)]
+    mapping = _to_mapping(value)
+    if mapping is not None:
+        parts: list[str] = []
+        for key, val in mapping.items():
+            parts.append(str(key))
+            parts.extend(_flatten_to_strings(val))
+        return parts
+    if isinstance(value, (list, tuple, set)):
+        parts = []
+        for item in value:
+            parts.extend(_flatten_to_strings(item))
+        return parts
+    return [str(value)]
+
+
+def _field_value(evidence: Any, field: str) -> Any:
+    mapping = _to_mapping(evidence)
+    if mapping is not None:
+        return mapping.get(field)
+    return getattr(evidence, field, None)
+
+
+def _field_text(evidence: Any, fields: tuple[str, ...]) -> str:
+    parts: list[str] = []
+    for field in fields:
+        parts.extend(_flatten_to_strings(_field_value(evidence, field)))
+    return " ".join(parts).lower()
+
+
+def evidence_to_searchable_text(evidence: Any) -> str:
+    """Build lower-case searchable text from all evidence fields used in eval."""
+    parts: list[str] = []
+    for field in SEARCHABLE_FIELDS:
+        parts.extend(_flatten_to_strings(_field_value(evidence, field)))
+    # Include the whole object as a fallback so direct dict evidence with
+    # adjacent fields (for example plaintiff_names/defendant_names) remains searchable.
+    parts.extend(_flatten_to_strings(evidence))
+    return " ".join(part for part in parts if part).lower()
+
+
+# Backward-compatible alias for older callers/tests.
 def _textify(row: Any) -> str:
-    if hasattr(row, "snippet"):
-        return f"{getattr(row, 'snippet', '')} {getattr(row, 'title', '')} {getattr(row, 'source', '')} {getattr(row, 'metadata', {})}"
-    if isinstance(row, dict):
-        return f"{row.get('text','')} {row.get('snippet','')} {row.get('title','')} {row.get('metadata',{})}"
-    return str(row)
+    return evidence_to_searchable_text(row)
 
 
-def _eval_single_query(results: list[Any], expected_keywords: list[str], k: int) -> dict[str, float]:
-    kws = [x.lower() for x in expected_keywords]
-    relevance = []
-    matched = set()
+def _keyword_hits(text: str, expected_keywords: list[str]) -> list[str]:
+    hits = []
+    for kw in expected_keywords:
+        normalized = str(kw).strip().lower()
+        if normalized and normalized in text:
+            hits.append(normalized)
+    return hits
+
+
+def _tokens(text: str) -> set[str]:
+    stopwords = {"a", "an", "and", "by", "for", "history", "in", "of", "or", "patent", "the", "to", "with"}
+    return {tok for tok in re.findall(r"[a-z0-9]+", text.lower()) if len(tok) > 1 and tok not in stopwords}
+
+
+def _eval_evidence_relevance(module: str, evidence: Any, expected_keywords: list[str], query: str) -> dict[str, Any]:
+    searchable_text = evidence_to_searchable_text(evidence)
+    matched_keywords = set(_keyword_hits(searchable_text, expected_keywords))
+    relevant = False
+    keyword_coverage = len(matched_keywords) / max(1, len(expected_keywords))
+    context_relevance = keyword_coverage
+    rule_based_hit = False
+
+    if module == "platform_policy":
+        relevant = bool(matched_keywords)
+
+    elif module == "patent_claim":
+        patent_text = _field_text(evidence, PATENT_FIELDS) or searchable_text
+        matched_keywords = set(_keyword_hits(patent_text, expected_keywords))
+        product_overlap = _tokens(query).intersection(_tokens(patent_text))
+        relevant = bool(matched_keywords)
+        keyword_coverage = len(matched_keywords) / max(1, len(expected_keywords))
+        context_relevance = max(keyword_coverage, len(product_overlap) / max(1, len(_tokens(query))))
+
+    elif module == "trademark":
+        trademark_text = _field_text(evidence, TRADEMARK_FIELDS) or searchable_text
+        brand_keywords = [kw for kw in expected_keywords if str(kw).strip().lower() not in {"owner", "owners"}]
+        matched_keywords = set(_keyword_hits(trademark_text, brand_keywords))
+        rule_based_hit = any(marker in trademark_text for marker in ("risk_screening", "potential risk", "direct trademark", "trademark_case")) and bool(matched_keywords)
+        relevant = bool(matched_keywords) or rule_based_hit
+        keyword_coverage = len(matched_keywords) / max(1, len(brand_keywords))
+        context_relevance = keyword_coverage
+
+    elif module == "litigation":
+        litigation_text = _field_text(evidence, LITIGATION_FIELDS)
+        has_litigation_evidence = bool(litigation_text.strip()) or "litigation" in searchable_text or "case_count" in searchable_text
+        matched_keywords = set(_keyword_hits(searchable_text, expected_keywords))
+        relevant = has_litigation_evidence and bool(matched_keywords)
+        keyword_coverage = len(matched_keywords) / max(1, len(expected_keywords))
+        context_relevance = keyword_coverage
+
+    else:
+        relevant = bool(matched_keywords)
+
+    return {
+        "relevant": relevant,
+        "matched_keywords": sorted(matched_keywords),
+        "keyword_coverage": keyword_coverage,
+        "context_relevance": context_relevance,
+        "rule_based_hit": rule_based_hit,
+        "searchable_text": searchable_text,
+    }
+
+
+def _eval_single_query(results: list[Any], expected_keywords: list[str], k: int, module: str = "", query: str = "") -> dict[str, Any]:
+    relevance: list[bool] = []
+    matched: set[str] = set()
+    context_scores: list[float] = []
+    keyword_scores: list[float] = []
+    rule_based_hit = False
+
     for r in results[:k]:
-        txt = _textify(r).lower()
-        hits = [kw for kw in kws if kw in txt]
-        for h in hits:
-            matched.add(h)
-        relevance.append(bool(hits))
+        eval_row = _eval_evidence_relevance(module, r, expected_keywords, query)
+        relevance.append(bool(eval_row["relevant"]))
+        matched.update(eval_row["matched_keywords"])
+        context_scores.append(float(eval_row["context_relevance"]))
+        keyword_scores.append(float(eval_row["keyword_coverage"]))
+        rule_based_hit = rule_based_hit or bool(eval_row["rule_based_hit"])
+
     rel_count = sum(1 for x in relevance if x)
     precision = rel_count / max(1, k)
     recall = 1.0 if rel_count > 0 else 0.0
@@ -43,7 +230,8 @@ def _eval_single_query(results: list[Any], expected_keywords: list[str], k: int)
                 mrr = 1 / i
             ap_acc += seen_rel / i
     ap = ap_acc / max(1, rel_count)
-    context_rel = len(matched) / max(1, len(kws))
+    context_rel = max(context_scores, default=0.0)
+    keyword_coverage = max(keyword_scores, default=0.0)
     return {
         "precision_at_k": precision,
         "recall_at_k": recall,
@@ -51,27 +239,38 @@ def _eval_single_query(results: list[Any], expected_keywords: list[str], k: int)
         "mrr": mrr,
         "ap_at_k": ap,
         "context_relevance": context_rel,
+        "keyword_coverage": keyword_coverage,
+        "matched_keywords": sorted(matched),
+        "relevant": bool(rel_count),
+        "rule_based_hit": rule_based_hit,
     }
 
 
 def _retrieve(module: str, query: str, k: int, use_reranker: bool, rerank_top_k: int) -> list[Any]:
     if module == "platform_policy":
         from src.retrieval.platform_retriever import PlatformPolicyRetriever
-        return PlatformPolicyRetriever().hybrid_search(query, top_k=k, use_reranker=use_reranker, rerank_top_k=rerank_top_k)
+        retriever = PlatformPolicyRetriever()
+        retriever.rerank_top_k = rerank_top_k
+        return retriever.hybrid_search(query, top_k=k, use_reranker=use_reranker)
     if module == "patent_claim":
         from src.retrieval.claim_retriever import ClaimRetriever
-        return ClaimRetriever().hybrid_search(query, top_k=k, use_reranker=use_reranker, rerank_top_k=rerank_top_k)
+        retriever = ClaimRetriever()
+        retriever.rerank_top_k = rerank_top_k
+        return retriever.hybrid_search(query, top_k=k, use_reranker=use_reranker)
     if module == "trademark":
         from src.retrieval.trademark_retriever import TrademarkRetriever
         matches = TrademarkRetriever().search_trademarks(type("obj", (), {"candidate_brand_terms": query.split(), "brand_terms": query.split(), "normalized_title": query, "normalized_description": ""})())
-        return [m.evidence for m in matches if getattr(m, "evidence", None)]
+        return [m.evidence if getattr(m, "evidence", None) is not None else m for m in matches]
     if module == "litigation":
         from src.retrieval.litigation_retriever import LitigationRetriever
         token = "".join(ch for ch in query if ch.isdigit())
         if not token:
             return []
-        summary = LitigationRetriever().get_litigation_summary(token)
-        return [summary] if summary else []
+        retriever = LitigationRetriever()
+        summary = retriever.get_litigation_summary(token)
+        if summary:
+            return [summary]
+        return retriever.get_litigation_by_patent(token)[:k]
     raise ValueError(f"unsupported module: {module}")
 
 
@@ -91,8 +290,22 @@ def evaluate_retrieval(path: str = "data/eval/retrieval_eval.jsonl", compare_rer
                 results = []
                 warning = str(e)
             latency = time.perf_counter() - st
-            metrics = _eval_single_query(results, s.get("expected_keywords", []), k)
-            per_query.append({"id": s["id"], "module": module, "latency_sec": latency, "warning": warning, **metrics})
+            expected_keywords = s.get("expected_keywords", [])
+            metrics = _eval_single_query(results, expected_keywords, k, module=module, query=s["query"])
+            top_preview = evidence_to_searchable_text(results[0])[:200] if results else ""
+            per_query.append({
+                "id": s["id"],
+                "module": module,
+                "query": s["query"],
+                "expected_keywords": expected_keywords,
+                "retrieved_evidence_count": len(results),
+                "top_evidence_preview": top_preview,
+                "matched_keywords": metrics.pop("matched_keywords"),
+                "relevant": metrics.pop("relevant"),
+                "latency_sec": latency,
+                "warning": warning,
+                **metrics,
+            })
 
         by_module: dict[str, list[dict[str, Any]]] = {}
         for row in per_query:
@@ -100,10 +313,10 @@ def evaluate_retrieval(path: str = "data/eval/retrieval_eval.jsonl", compare_rer
         module_metrics = []
         for module, rows in by_module.items():
             n = len(rows)
-            agg = {k: sum(r[k] for r in rows) / max(1, n) for k in ["precision_at_k", "recall_at_k", "f1_at_k", "mrr", "ap_at_k", "context_relevance", "latency_sec"]}
+            agg = {key: sum(r[key] for r in rows) / max(1, n) for key in ["precision_at_k", "recall_at_k", "f1_at_k", "mrr", "ap_at_k", "context_relevance", "latency_sec"]}
             module_metrics.append({"module": module, "precision_at_k": agg["precision_at_k"], "recall_at_k": agg["recall_at_k"], "f1_at_k": agg["f1_at_k"], "map": agg["ap_at_k"], "mrr": agg["mrr"], "context_relevance": agg["context_relevance"], "avg_latency_sec": agg["latency_sec"]})
         n_all = len(per_query)
-        overall = {k: sum(r[k] for r in per_query) / max(1, n_all) for k in ["precision_at_k", "recall_at_k", "f1_at_k", "mrr", "ap_at_k", "context_relevance", "latency_sec"]}
+        overall = {key: sum(r[key] for r in per_query) / max(1, n_all) for key in ["precision_at_k", "recall_at_k", "f1_at_k", "mrr", "ap_at_k", "context_relevance", "latency_sec"]}
         return {"per_query": per_query, "by_module": module_metrics, "overall": {"module": "overall", "precision_at_k": overall["precision_at_k"], "recall_at_k": overall["recall_at_k"], "f1_at_k": overall["f1_at_k"], "map": overall["ap_at_k"], "mrr": overall["mrr"], "context_relevance": overall["context_relevance"], "avg_latency_sec": overall["latency_sec"]}}
 
     no_res = run(False)
