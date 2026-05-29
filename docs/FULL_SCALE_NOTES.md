@@ -1,48 +1,186 @@
-# FULL SCALE NOTES
+# Full-scale Notes
 
-## 1) 推荐硬件（本地全量构建）
+## 1. Project Positioning
+
+This repository implements a **RAG-LLM based cross-border e-commerce Listing intellectual property risk screening system**.
+
+The current primary scenario is **Temu U.S. marketplace Listing IP risk screening**. The pipeline is optimized for preliminary screening of trademark, platform-policy, patent-claim, and litigation signals before a listing is published.
+
+## 2. Data Source Strategy
+
+The project uses different retrieval/indexing strategies for different data types:
+
+- **USPTO Trademark structured data**: structured tables queried with DuckDB.
+- **Patent Litigation Docket Reports Data**: structured case, patent, and party data queried with DuckDB.
+- **Temu IP Policy**: long-form policy text indexed with Chroma + BM25 + RRF.
+- **USPTO Patent Claims Research Dataset**: long-form patent claim text indexed with Chroma + BM25 + RRF.
+- **sample data / raw data**: sample data is for local demos and tests; raw data is for full-scale builds.
+
+## 3. Why not vectorize everything
+
+Full vectorization is not the best engineering choice for this project.
+
+- **Trademark and litigation records are structured evidence**. They contain fields such as marks, owners, classes, registration status, patent identifiers, case metadata, parties, and dates. DuckDB queries preserve precision, filtering, joins, and auditability.
+- **Platform policy and patent claims are long-text evidence**. Hybrid retrieval with Chroma + BM25 + RRF gives better recall across semantic and lexical matching.
+- **Reranker is a second-stage text evidence sorter**. It is applied after hybrid retrieval to refine evidence order, not to replace structured SQL retrieval.
+
+This architecture keeps exact structured facts separate from semantic long-text retrieval.
+
+## 4. Architecture Flow
+
+```text
+User Question / Listing
+→ Query Parser
+→ Query Rewriter
+→ Trademark Structured RAG
+→ Platform Policy Hybrid RAG
+→ Patent Claim RAG
+→ Litigation Structured RAG
+→ Risk Judge
+→ LLM Final Answer
+→ Streamlit UI
+```
+
+The flow supports English and Chinese user inputs. For Chinese inputs, the intended workflow is:
+
+```text
+中文输入 → 英文检索 query → 英文 evidence → 中文回答
+```
+
+## 5. Recommended Hardware for Local Full Builds
+
 - CPU: 8-16 cores
-- RAM: 32GB（建议 64GB，特别是 patent claims 全量）
-- Disk: NVMe SSD，至少 200GB 可用空间
-- GPU: 非必须（当前 embedding 默认 CPU 可跑），有 GPU 可显著提速
+- RAM: 32 GB minimum; 64 GB recommended for larger patent-claim builds
+- Disk: NVMe SSD with at least 200 GB free space for raw data and indexes
+- GPU: optional; useful for faster embedding/reranker execution but not required for the MVP
 
-## 2) Sample mode vs Full mode
-- **Sample mode**：`data/sample/**`，用于本地开发、快速验收、CI。
-- **Full mode**：`data/raw/**`，用于真实规模数据构建。
-- Full mode 建议配合 `--limit`、`--batch_size`、`--resume` 控制风险与中断恢复。
+## 6. Sample Mode vs Full Mode
 
-## 3) 全量构建推荐顺序
-1. `scripts/01_build_trademark_db.py`
-2. `scripts/04_build_litigation_db.py`
-3. `scripts/02_build_platform_index.py`
-4. `scripts/03_build_claim_index.py`
+- **Sample mode**: uses `data/sample/**`; intended for local development, fast acceptance checks, smoke tests, and demos.
+- **Full mode**: uses `data/raw/**`; intended for real-scale indexing and larger experiments.
 
-说明：结构化 DuckDB 优先构建，便于先获得可查询基础能力，再追加向量索引。
+Full mode should be run with explicit `--limit`, `--batch_size`, and resume/rebuild settings to reduce operational risk.
 
-## 4) Chroma 定位与替代
-- 当前 **Chroma 是本地 MVP baseline**，适合单机验证与原型。
-- 生产 full-scale 可替换为：Qdrant / Milvus / Elasticsearch / OpenSearch。
-- 建议保持 Retriever 接口稳定（`ClaimRetriever` / hybrid retriever），底层向量库可插拔替换。
+## 7. Full-scale Build Order
 
-## 5) 为什么 litigation `documents.csv` 第一版不处理
-- `documents.csv` 通常体量大、噪声高、字段异构且 OCR/清洗成本高。
-- 第一版先聚焦 `cases/patents/names` 结构化闭环，优先保证可解释性与吞吐稳定。
-- 后续可将 documents 作为二阶段召回源（按案件/专利先过滤再检索）。
+Recommended local build order:
 
-## 6) 为什么 Structured RAG 更适合商标和诉讼表
-- 商标、诉讼核心字段天然结构化（案号、状态、类别、日期、主体），SQL 过滤与 join 更准确。
-- 全量向量化会引入无关语义噪声，且成本高、解释性弱。
-- 结构化检索 + 局部语义检索（policy/claim）是更稳妥的工程折中。
+```bash
+python scripts/01_build_trademark_db.py --sample --force_rebuild
+python scripts/02_build_platform_index.py
+python scripts/03_build_claim_index.py --sample --limit 50000 --batch_size 2000 --force_rebuild
+python scripts/04_build_litigation_db.py --sample --force_rebuild
+```
 
-## 7) 失败恢复与重建策略
-- 默认不删除已有产物；中断后可直接 `--resume`。
-- 仅 `--force_rebuild` 时删除旧索引/中间结果并全量重建。
-- Claim 构建支持中间 `claim_groups.jsonl` 持久化与已处理专利跳过。
+Structured DuckDB databases can be built first to establish reliable trademark and litigation lookup. Long-text vector/BM25 indexes can then be built for policy and patent-claim retrieval.
 
-## 8) MVP 限制
-- Chroma 仍为单机本地方案。
-- 未覆盖 litigation `documents.csv` 语义管线。
-- 目前尚未引入分布式任务编排（如 Airflow/Ray/Spark）。
+## 8. Reranker Configuration
 
-## 9) 免责声明
-本系统仅用于 **初步 IP 风险筛查**，不构成法律意见。
+Two retrieval configurations are supported for comparison:
+
+1. **Chroma + BM25 + RRF baseline**
+2. **Chroma + BM25 + RRF + BGE Reranker**
+
+The expected local model paths are:
+
+```text
+models/bge-small-en-v1.5
+models/bge-reranker-base
+```
+
+Do not commit these model directories to GitHub. They are large local artifacts and should remain ignored by Git.
+
+## 9. LLM Endpoint Configuration
+
+The LLM client follows OpenAI-compatible environment variables:
+
+```bash
+OPENAI_API_KEY=
+OPENAI_BASE_URL=
+OPENAI_MODEL=
+MOCK_LLM=true/false
+```
+
+DeepSeek-compatible example:
+
+```bash
+OPENAI_BASE_URL=https://api.deepseek.com/v1
+OPENAI_MODEL=deepseek-chat
+```
+
+Qwen-compatible example:
+
+```bash
+OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+OPENAI_MODEL=qwen-plus
+```
+
+Use `MOCK_LLM=true` for deterministic demos, local smoke tests, and environments without external model access.
+
+## 10. Chroma Positioning and Production Alternatives
+
+Chroma is currently the **local MVP vector store**. It is suitable for single-node prototyping, demos, and small local experiments.
+
+For production or large-scale retrieval, consider replacing it with:
+
+- Qdrant
+- Milvus
+- Elasticsearch
+- OpenSearch
+
+Retriever interfaces should stay stable so the underlying vector backend can be replaced without changing the business logic.
+
+## 11. Litigation Documents Scope
+
+The first version focuses on structured litigation tables rather than full semantic processing of `documents.csv`.
+
+Reasons:
+
+- Litigation documents are often large, noisy, and heterogeneous.
+- OCR and document-cleaning quality can dominate retrieval quality.
+- Structured case/patent/name data provides a more explainable MVP retrieval loop.
+
+A later version can add litigation document retrieval as a second-stage source after filtering by case, patent, or party.
+
+## 12. Failure Recovery and Rebuild Strategy
+
+- Existing artifacts are generally preserved unless `--force_rebuild` is used.
+- Use `--force_rebuild` when you need to delete old outputs and rebuild from scratch.
+- Patent-claim indexing should be run with controlled batch sizes for large datasets.
+- Generated databases, vector indexes, BM25 artifacts, and local models should not be committed.
+
+## 13. Evaluation Commands
+
+```bash
+python scripts/06_run_eval.py --all --mock_llm true
+python scripts/06_run_eval.py --retrieval --compare_reranker --mock_llm true
+python scripts/06_run_eval.py --risk --zh --mock_llm true
+python scripts/06_run_eval.py --response --zh --mock_llm true
+```
+
+Evaluation currently covers retrieval metrics, risk-label behavior, Chinese scenarios, response groundedness, citation coverage, and disclaimer behavior.
+
+## 14. Current Limitations
+
+- Sample data results are for demonstration only.
+- Patent claim relevance may contain false positives.
+- The system does not provide legal conclusions.
+- EUIPO questions require a separate EU data source.
+- Chroma is a local MVP vector store.
+- Litigation `documents.csv` semantic retrieval is not part of the first structured-litigation pipeline.
+
+## 15. Disclaimer
+
+This system is for preliminary IP risk screening only and does not constitute legal advice.
+
+中文：本系统仅用于知识产权风险初筛，不构成法律意见。
+
+## 16. Future Work
+
+- EUIPO FAQ RAG
+- Amazon / AliExpress / TikTok Shop policy
+- Qdrant / Milvus
+- Knowledge Graph
+- CLIP image logo detection
+- More robust LLM judge
+- Fine-tuning final answer generator
