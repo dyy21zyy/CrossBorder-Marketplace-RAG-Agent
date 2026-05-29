@@ -1,0 +1,113 @@
+{
+  "per_sample": [
+    {
+      "id": "response_001",
+      "faithfulness": 1.0,
+      "unsupported_claim_rate": 0.0,
+      "answer_relevance": 1.0,
+      "disclaimer_coverage": 1,
+      "forbidden_claim_rate": 0,
+      "citation_coverage": 0.0,
+      "chinese_answer_rate": 1
+    },
+    {
+      "id": "response_002",
+      "faithfulness": 1.0,
+      "unsupported_claim_rate": 0.0,
+      "answer_relevance": 1.0,
+      "disclaimer_coverage": 1,
+      "forbidden_claim_rate": 0,
+      "citation_coverage": 0.0,
+      "chinese_answer_rate": 1
+    },
+    {
+      "id": "response_003",
+      "faithfulness": 1.0,
+      "unsupported_claim_rate": 0.0,
+      "answer_relevance": 1.0,
+      "disclaimer_coverage": 1,
+      "forbidden_claim_rate": 0,
+      "citation_coverage": 0.0,
+      "chinese_answer_rate": 1
+    },
+    {
+      "id": "response_004",
+      "faithfulness": 1.0,
+      "unsupported_claim_rate": 0.0,
+      "answer_relevance": 1.0,
+      "disclaimer_coverage": 1,
+      "forbidden_claim_rate": 0,
+      "citation_coverage": 0.0,
+      "chinese_answer_rate": 1
+    },
+    {
+      "id": "response_005",
+      "faithfulness": 1.0,
+      "unsupported_claim_rate": 0.0,
+      "answer_relevance": 1.0,
+      "disclaimer_coverage": 1,
+      "forbidden_claim_rate": 0,
+      "citation_coverage": 0.0,
+      "chinese_answer_rate": 1
+    },
+    {
+      "id": "response_006",
+      "faithfulness": 1.0,
+      "unsupported_claim_rate": 0.0,
+      "answer_relevance": 1.0,
+      "disclaimer_coverage": 1,
+      "forbidden_claim_rate": 0,
+      "citation_coverage": 0.0,
+      "chinese_answer_rate": 1
+    },
+    {
+      "id": "response_007",
+      "faithfulness": 1.0,
+      "unsupported_claim_rate": 0.0,
+      "answer_relevance": 1.0,
+      "disclaimer_coverage": 1,
+      "forbidden_claim_rate": 0,
+      "citation_coverage": 0.0,
+      "chinese_answer_rate": 1
+    },
+    {
+      "id": "response_008",
+      "faithfulness": 1.0,
+      "unsupported_claim_rate": 0.0,
+      "answer_relevance": 1.0,
+      "disclaimer_coverage": 1,
+      "forbidden_claim_rate": 0,
+      "citation_coverage": 0.0,
+      "chinese_answer_rate": 1
+    },
+    {
+      "id": "response_009",
+      "faithfulness": 1.0,
+      "unsupported_claim_rate": 0.0,
+      "answer_relevance": 1.0,
+      "disclaimer_coverage": 1,
+      "forbidden_claim_rate": 0,
+      "citation_coverage": 0.0,
+      "chinese_answer_rate": 1
+    },
+    {
+      "id": "response_010",
+      "faithfulness": 1.0,
+      "unsupported_claim_rate": 0.0,
+      "answer_relevance": 1.0,
+      "disclaimer_coverage": 1,
+      "forbidden_claim_rate": 0,
+      "citation_coverage": 0.0,
+      "chinese_answer_rate": 1
+    }
+  ],
+  "metrics": {
+    "faithfulness": 1.0,
+    "unsupported_claim_rate": 0.0,
+    "answer_relevance": 1.0,
+    "disclaimer_coverage": 1.0,
+    "forbidden_claim_rate": 0.0,
+    "citation_coverage": 0.0,
+    "chinese_answer_rate": 1.0
+  }
+}

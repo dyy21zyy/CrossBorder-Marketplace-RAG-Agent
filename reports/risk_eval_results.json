@@ -1,0 +1,419 @@
+{
+  "no_reranker": {
+    "mode": "no_reranker",
+    "per_sample": [
+      {
+        "id": "risk_001",
+        "title": "Generic listing sample 1",
+        "question": "Generic listing sample 1",
+        "expected_trademark_risk": "medium",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "low",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "unknown",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "high",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "medium",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_002",
+        "title": "Generic listing sample 2",
+        "question": "Generic listing sample 2",
+        "expected_trademark_risk": "low",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "unknown",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "high",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "medium",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "medium",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_003",
+        "title": "Generic listing sample 3",
+        "question": "Generic listing sample 3",
+        "expected_trademark_risk": "unknown",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "high",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "medium",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "low",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "high",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_004",
+        "title": "Generic listing sample 4",
+        "question": "Generic listing sample 4",
+        "expected_trademark_risk": "high",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "medium",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "low",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "unknown",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "high",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_005",
+        "title": "Listing sample 5 compatible with iPhone",
+        "question": "Listing sample 5 compatible with iPhone",
+        "expected_trademark_risk": "medium",
+        "predicted_trademark_risk": "medium-high",
+        "expected_platform_policy_risk": "low",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "unknown",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "high",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "medium",
+        "predicted_overall_risk": "medium-high",
+        "correct": false
+      },
+      {
+        "id": "risk_006",
+        "title": "Generic listing sample 6",
+        "question": "Generic listing sample 6",
+        "expected_trademark_risk": "low",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "unknown",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "high",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "medium",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "medium",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_007",
+        "title": "Generic listing sample 7",
+        "question": "Generic listing sample 7",
+        "expected_trademark_risk": "unknown",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "high",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "medium",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "low",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "high",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_008",
+        "title": "Generic listing sample 8",
+        "question": "Generic listing sample 8",
+        "expected_trademark_risk": "high",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "medium",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "low",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "unknown",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "high",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_009",
+        "title": "Generic listing sample 9",
+        "question": "Generic listing sample 9",
+        "expected_trademark_risk": "medium",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "low",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "unknown",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "high",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "medium",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_010",
+        "title": "Listing sample 10 compatible with iPhone",
+        "question": "Listing sample 10 compatible with iPhone",
+        "expected_trademark_risk": "low",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "unknown",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "high",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "medium",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "medium",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_011",
+        "title": "Generic listing sample 11",
+        "question": "Generic listing sample 11",
+        "expected_trademark_risk": "unknown",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "high",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "medium",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "low",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "high",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_012",
+        "title": "Generic listing sample 12",
+        "question": "Generic listing sample 12",
+        "expected_trademark_risk": "high",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "medium",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "low",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "unknown",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "high",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_013",
+        "title": "Generic listing sample 13",
+        "question": "Generic listing sample 13",
+        "expected_trademark_risk": "medium",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "low",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "unknown",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "high",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "medium",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_014",
+        "title": "Generic listing sample 14",
+        "question": "Generic listing sample 14",
+        "expected_trademark_risk": "low",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "unknown",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "high",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "medium",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "medium",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_015",
+        "title": "Listing sample 15 compatible with iPhone",
+        "question": "Listing sample 15 compatible with iPhone",
+        "expected_trademark_risk": "unknown",
+        "predicted_trademark_risk": "medium-high",
+        "expected_platform_policy_risk": "high",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "medium",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "low",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "high",
+        "predicted_overall_risk": "medium-high",
+        "correct": false
+      },
+      {
+        "id": "risk_016",
+        "title": "Generic listing sample 16",
+        "question": "Generic listing sample 16",
+        "expected_trademark_risk": "high",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "medium",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "low",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "unknown",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "high",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_017",
+        "title": "Generic listing sample 17",
+        "question": "Generic listing sample 17",
+        "expected_trademark_risk": "medium",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "low",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "unknown",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "high",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "medium",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_018",
+        "title": "Generic listing sample 18",
+        "question": "Generic listing sample 18",
+        "expected_trademark_risk": "low",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "unknown",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "high",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "medium",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "medium",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_019",
+        "title": "Generic listing sample 19",
+        "question": "Generic listing sample 19",
+        "expected_trademark_risk": "unknown",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "high",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "medium",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "low",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "high",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "risk_020",
+        "title": "Listing sample 20 compatible with iPhone",
+        "question": "Listing sample 20 compatible with iPhone",
+        "expected_trademark_risk": "high",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "medium",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "low",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "unknown",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "high",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      }
+    ],
+    "metrics": {
+      "trademark_risk_accuracy": 0.2,
+      "trademark_risk_high_risk_recall": 0.0,
+      "trademark_risk_unknown_handling_accuracy": 0.0,
+      "trademark_risk_false_positive_rate": 0.0,
+      "trademark_risk_false_negative_rate": 0.0,
+      "trademark_risk_confusion_matrix": {
+        "high": {
+          "medium": 5
+        },
+        "low": {
+          "medium": 5
+        },
+        "medium": {
+          "medium": 4,
+          "medium-high": 1
+        },
+        "unknown": {
+          "medium": 4,
+          "medium-high": 1
+        }
+      },
+      "platform_policy_risk_accuracy": 0.25,
+      "platform_policy_risk_high_risk_recall": 0.0,
+      "platform_policy_risk_unknown_handling_accuracy": 1.0,
+      "platform_policy_risk_false_positive_rate": 0.0,
+      "platform_policy_risk_false_negative_rate": 1.0,
+      "platform_policy_risk_confusion_matrix": {
+        "high": {
+          "unknown": 5
+        },
+        "low": {
+          "unknown": 5
+        },
+        "medium": {
+          "unknown": 5
+        },
+        "unknown": {
+          "unknown": 5
+        }
+      },
+      "patent_claim_risk_accuracy": 0.25,
+      "patent_claim_risk_high_risk_recall": 0.0,
+      "patent_claim_risk_unknown_handling_accuracy": 1.0,
+      "patent_claim_risk_false_positive_rate": 0.0,
+      "patent_claim_risk_false_negative_rate": 1.0,
+      "patent_claim_risk_confusion_matrix": {
+        "high": {
+          "unknown": 5
+        },
+        "low": {
+          "unknown": 5
+        },
+        "medium": {
+          "unknown": 5
+        },
+        "unknown": {
+          "unknown": 5
+        }
+      },
+      "litigation_risk_accuracy": 0.25,
+      "litigation_risk_high_risk_recall": 0.0,
+      "litigation_risk_unknown_handling_accuracy": 1.0,
+      "litigation_risk_false_positive_rate": 0.0,
+      "litigation_risk_false_negative_rate": 1.0,
+      "litigation_risk_confusion_matrix": {
+        "high": {
+          "unknown": 5
+        },
+        "low": {
+          "unknown": 5
+        },
+        "medium": {
+          "unknown": 5
+        },
+        "unknown": {
+          "unknown": 5
+        }
+      },
+      "overall_risk_accuracy": 0.5,
+      "overall_risk_confusion_matrix": {
+        "high": {
+          "medium": 9,
+          "medium-high": 1
+        },
+        "medium": {
+          "medium": 9,
+          "medium-high": 1
+        }
+      },
+      "sample_accuracy": 0.0
+    }
+  }
+}
