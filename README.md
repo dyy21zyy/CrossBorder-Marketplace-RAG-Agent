@@ -1,201 +1,254 @@
 # CrossBorder Marketplace RAG Agent
 
-## Project Overview
-A multi-source IP risk screening system for cross-border marketplace listings (US-oriented), combining structured retrieval, hybrid RAG, and optional LLM explanation.
+## 1. Project Overview
 
-## Business Problem
-Sellers need fast **preliminary** checks for trademark/policy/patent/litigation signals before publishing listings.
+This project is a **RAG-LLM based cross-border e-commerce Listing intellectual property (IP) risk screening system**.
 
-## System Architecture
-- Ingestion → Preprocessing → Indexing → Retrieval → Decision → Agents → Evaluation → UI
-- Structured sources: DuckDB
-- Unstructured/semi-structured: Chroma + BM25 + RRF
+It helps sellers and operators perform preliminary checks on marketplace listing titles, descriptions, categories, and authorization status before publication. The system combines structured retrieval, hybrid text retrieval, optional reranking, rule-based risk judgment, and evidence-grounded LLM response generation.
 
-## Data Sources
-- Trademark data (USPTO-like structured tables)
-- Platform IP policy PDFs
-- Patent claim datasets
-- Litigation docket datasets
+> This project is designed for preliminary screening and workflow support. It does not provide legal conclusions or legal advice.
 
-## Why not vectorize everything
-- Structured fields should use SQL filters/joins (precision + explainability).
-- Long text (policy/claims) benefits from embeddings.
+## 2. Supported Scenario
 
-## DuckDB Structured RAG
-Used for:
-- Trademark lookup and class/status evidence
-- Litigation case summary by normalized patent id
+Current primary scenario:
 
-## Hybrid RAG for policy and patent claims
-- Vector retrieval + BM25 sparse retrieval
-- RRF fusion for robust recall
+- **Temu United States marketplace Listing IP risk screening**
 
-## LLM role in the system
-- Optional fallback for explanation/coordination
-- Must be evidence-grounded
-- Never outputs legal conclusion
+The MVP focuses on U.S.-oriented IP signals and Temu platform policy evidence for listing review.
 
-## Full-scale Notes
-- Chroma is a local MVP baseline for single-node development.
-- For production full-scale, replace vector backend with Qdrant / Milvus / Elasticsearch / OpenSearch.
-- Keep retriever interfaces stable so backend can be swapped without changing business logic.
+## 3. Data Sources
 
-## Build Commands (Sample vs Full)
-```bash
-# Sample mode
-python scripts/01_build_trademark_db.py --sample --force_rebuild
-python scripts/04_build_litigation_db.py --sample --force_rebuild
-python scripts/03_build_claim_index.py --sample --limit 50000 --batch_size 2000 --resume
+The current pipeline is built around the following data sources:
 
-# Full mode
-python scripts/01_build_trademark_db.py --full
-python scripts/04_build_litigation_db.py --full
-python scripts/03_build_claim_index.py --full --batch_size 50000 --resume
+- **USPTO Trademark structured data**
+- **USPTO Patent Claims Research Dataset**
+- **Patent Litigation Docket Reports Data**
+- **Temu IP Policy**
+- **sample data / raw data** under the project `data/` directory
+
+Sample data is intended for local development, smoke tests, and demos. Raw/full data is intended for larger-scale local or production indexing.
+
+## 4. Why not vectorize everything
+
+This project intentionally does **not** vectorize every source.
+
+- **Trademark / litigation data is structured data**, so it is stored and queried with **DuckDB**. SQL filters, joins, exact fields, statuses, dates, classes, parties, and patent identifiers are more precise and explainable than full-vector search for these sources.
+- **Platform policy / patent claims are long-text sources**, so they use **Chroma + BM25 + RRF**. Dense retrieval captures semantic similarity, BM25 preserves lexical matching, and Reciprocal Rank Fusion (RRF) combines the two recall channels.
+- **Reranker is used for text evidence refinement**. After hybrid retrieval produces candidates, the BGE reranker can re-rank evidence snippets for better top-k precision.
+
+This split keeps structured facts auditable while still supporting semantic retrieval over long policy and patent-claim text.
+
+## 5. System Architecture
+
+The current end-to-end architecture is:
+
+```text
+User Question / Listing
+→ Query Parser
+→ Query Rewriter
+→ Trademark Structured RAG
+→ Platform Policy Hybrid RAG
+→ Patent Claim RAG
+→ Litigation Structured RAG
+→ Risk Judge
+→ LLM Final Answer
+→ Streamlit UI
 ```
 
-## Sample Data Generation
-```bash
-python scripts/make_sample_data_local.py
+Main implementation areas:
+
+- Listing parsing and Chinese query parsing: `src/listing/`
+- Query rewriting and retrieval: `src/retrieval/`
+- Structured storage and vector indexing: `src/indexing/`
+- Risk decision logic: `src/decision/`
+- LLM agents and final answer generation: `src/agents/`
+- Streamlit web UI: `src/webapp/app.py`
+- Evaluation: `src/evaluation/` and `scripts/06_run_eval.py`
+
+## 6. Chinese Input Support
+
+The system supports Chinese user input with a cross-lingual workflow:
+
+```text
+中文输入 → 英文检索 query → 英文 evidence → 中文回答
 ```
 
-## Installation
+In practice, Chinese listing questions are parsed and rewritten into English retrieval queries. Retrieval evidence remains grounded in English source material, while the final answer can be generated in Chinese for the user.
+
+## 7. Reranker
+
+The retrieval baseline and reranker-enhanced setup are both supported:
+
+1. **Chroma + BM25 + RRF baseline**
+2. **Chroma + BM25 + RRF + BGE Reranker**
+
+RRF is used to fuse dense vector retrieval and BM25 sparse retrieval. The BGE reranker is a cross-encoder style evidence reranker used after first-stage retrieval. It may improve Precision@K and MRR, but it can increase latency and requires the local reranker model files.
+
+## 8. LLM Configuration
+
+Create a `.env` file or export environment variables before running LLM-backed flows.
+
+```bash
+OPENAI_API_KEY=
+OPENAI_BASE_URL=
+OPENAI_MODEL=
+MOCK_LLM=true/false
+```
+
+`MOCK_LLM=true` is useful for deterministic local demos, tests, and environments without a real model endpoint.
+
+### DeepSeek-compatible example
+
+```bash
+OPENAI_BASE_URL=https://api.deepseek.com/v1
+OPENAI_MODEL=deepseek-chat
+MOCK_LLM=false
+```
+
+### Qwen-compatible example
+
+```bash
+OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+OPENAI_MODEL=qwen-plus
+MOCK_LLM=false
+```
+
+## 9. Installation
+
+```bash
+pip install -r requirements.txt
+```
+
+Optional virtual environment setup:
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Environment Variables
-```bash
-OPENAI_API_KEY=...
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4.1-mini
-MOCK_LLM=true
+On Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 ```
 
-## Build Trademark DB
+## 10. Model Download
+
+The local MVP expects embedding and reranker models to be available under:
+
+```text
+models/bge-small-en-v1.5
+models/bge-reranker-base
+```
+
+Do **not** upload model files to GitHub. The `models/` directory should stay ignored by Git because these files are large generated/local artifacts.
+
+If downloading from Hugging Face is slow or blocked in your environment, configure an appropriate mirror before downloading, for example:
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+```
+
+## 11. Build Indexes
+
+Build local sample indexes and databases:
+
 ```bash
 python scripts/01_build_trademark_db.py --sample --force_rebuild
-```
-
-## Build Platform Policy Index
-```bash
 python scripts/02_build_platform_index.py
-```
-
-## Build Claim Index
-```bash
-python scripts/03_build_claim_index.py --sample --limit 50000 --batch_size 2000 --resume
-```
-
-## Build Litigation DB
-```bash
+python scripts/03_build_claim_index.py --sample --limit 50000 --batch_size 2000 --force_rebuild
 python scripts/04_build_litigation_db.py --sample --force_rebuild
 ```
 
-## Run CLI Demo
+The build outputs are local artifacts and should not be committed.
+
+## 12. Run CLI Demo
+
+### English listing demo
+
 ```bash
-python scripts/05_run_demo.py --title "Phone case compatible with iPhone 15" --description "Magnetic transparent case" --category "phone accessory" --platform "Temu" --has_authorization false --mock_llm true
+python scripts/05_run_demo.py --title "Phone case compatible with iPhone 15" --description "Magnetic transparent phone case for iPhone 15" --category "phone accessory" --platform "Temu" --has_authorization false --mock_llm true
 ```
 
-## Run Streamlit Demo
+### Patent and litigation demo
+
+```bash
+python scripts/05_run_demo.py --title "Foldable magnetic phone stand with ring holder" --description "Adjustable magnetic phone holder with foldable ring stand" --category "phone accessory" --platform "Temu" --has_authorization false --enable_patent_check true --enable_litigation_check true --use_reranker true --mock_llm true
+```
+
+## 13. Run Streamlit
+
+Windows Command Prompt:
+
+```bat
+set PYTHONPATH=%CD%
+python -m streamlit run src/webapp/app.py
+```
+
+macOS / Linux:
+
+```bash
+export PYTHONPATH=$PWD
+python -m streamlit run src/webapp/app.py
+```
+
+Alternative helper script:
+
 ```bash
 python scripts/07_run_webapp.py
 ```
 
-## Run Evaluation
-```bash
-python scripts/06_run_eval.py --mock_llm true
-```
+## 14. Run Evaluation
 
-## Example Inputs and Outputs
-- Input: title/description/category/platform/authorization
-- Output: dimension risks (trademark/platform/patent/litigation), evidence snippets, rewrite suggestions, final disclaimer
-
-## Limitations
-- Sample data coverage is limited
-- Litigation `documents.csv` not in core pipeline (MVP stage)
-- Local vector store (Chroma) is single-node baseline
-
-## Future Work
-- Amazon IP Policy
-- AliExpress / TikTok Shop policy
-- Reranker
-- Low-confidence second retrieval
-- Litigation documents stage classification
-- Knowledge Graph: Brand–Trademark–Patent–Litigation
-- NetworkX / Neo4j
-- Louvain community detection
-- Image Logo detection
-- CLIP image retrieval
-- Qdrant / Milvus replacement for Chroma
-
-## Disclaimer
-For **preliminary IP risk screening only**. Not legal advice.
-
-## Reranker Ablation Study
-
-本项目评估两种检索配置：
-1. Hybrid Retrieval: Chroma + BM25 + RRF
-2. Hybrid Retrieval + Reranker: Chroma + BM25 + RRF + BGE Reranker
-
-- RRF 用于融合向量检索和 BM25；
-- Reranker 用 cross-encoder 对候选 evidence 精排；
-- Reranker 可能提升 Precision@K 和 MRR，但会增加 latency；
-- 评估脚本会输出 no_reranker vs with_reranker 的对比。
-
-运行命令：
+Run all evaluation tasks:
 
 ```bash
-python scripts/06_run_eval.py --compare_reranker --mock_llm true
+python scripts/06_run_eval.py --all --mock_llm true
 ```
 
-补充说明：
-- 如果本地无法下载 BAAI/bge-reranker-base，可以设置 `HF_ENDPOINT=https://hf-mirror.com`；
-- 或者先关闭 `use_reranker`；
-- sample 数据结果只用于 demo，不代表全量数据最终效果。
-
-## Evaluation
-
-本项目采用三层评估：
-
-1. Retrieval Evaluation / Context Relevance
-- Precision@K
-- Recall@K
-- F1@K
-- MRR
-- MAP
-- Context Relevance
-
-2. Risk Evaluation
-- Risk Label Accuracy
-- High-risk Recall
-- Unknown Handling Accuracy
-- False Positive Rate
-- False Negative Rate
-
-3. Response Evaluation
-- Faithfulness / Groundedness
-- Answer Relevance
-- Unsupported Claim Rate
-- Citation Coverage
-- Disclaimer Coverage
-
-## Reranker Ablation Study
-
-比较以下两种配置：
-- Hybrid Retrieval without Reranker
-- Hybrid Retrieval with Reranker
-
-运行命令：
+Compare retrieval with and without reranker:
 
 ```bash
 python scripts/06_run_eval.py --retrieval --compare_reranker --mock_llm true
 ```
 
-## LLM-as-Judge Optional Evaluation
+Run Chinese risk evaluation:
 
-- 默认使用 rule-based evaluation；
-- 可选启用 LLM Judge 接口；
-- LLM Judge 有额外成本且存在评估偏差；
-- LLM Judge 不应作为唯一评估依据。
+```bash
+python scripts/06_run_eval.py --risk --zh --mock_llm true
+```
+
+Run Chinese response evaluation:
+
+```bash
+python scripts/06_run_eval.py --response --zh --mock_llm true
+```
+
+The evaluation suite covers retrieval quality, risk label behavior, and final response groundedness.
+
+## 15. Current Limitations
+
+- Sample data results are for demonstration only and do not represent full production coverage.
+- Patent claim relevance may contain false positives because claim text can be broad and semantically similar to ordinary product descriptions.
+- The system does not provide legal conclusions.
+- EUIPO questions require a separate EU data source and are not covered by the current U.S.-focused MVP.
+- Chroma is the local MVP vector store and is not intended as the final production-scale vector infrastructure.
+
+## 16. Disclaimer
+
+This system is for preliminary IP risk screening only and does not constitute legal advice.
+
+中文：本系统仅用于知识产权风险初筛，不构成法律意见。
+
+## 17. Future Work
+
+- EUIPO FAQ RAG
+- Amazon / AliExpress / TikTok Shop policy
+- Qdrant / Milvus vector backend
+- Knowledge Graph
+- CLIP image logo detection
+- More robust LLM judge
+- Fine-tuning final answer generator

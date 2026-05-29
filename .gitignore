@@ -17,3 +17,6 @@ indexes/**
 # Keep sample/eval data tracked
 !data/sample/**
 !data/eval/**
+
+# Local model weights
+models/
