@@ -16,7 +16,9 @@ class PlatformPolicyRetriever:
         self.top_k = top_k or settings.top_k
         self.rerank_input_top_k = settings.rerank_input_top_k
         self.rerank_top_k = settings.rerank_top_k
-        self.collection = load_chroma_collection(settings.chroma_platform_dir, "temu_ip_policy")
+        self.collection = load_chroma_collection(
+            settings.chroma_platform_dir, "temu_ip_policy"
+        )
         self.bm25_index = load_bm25_index(settings.bm25_platform_path)
         self.reranker: CrossEncoderReranker | None = None
 
@@ -33,13 +35,17 @@ class PlatformPolicyRetriever:
         use_reranker: bool = False,
         rerank_top_k: int | None = None,
     ) -> list[EvidenceItem]:
-        rerank_input_top_k = max(top_k, self.rerank_input_top_k)
-        output_k = rerank_top_k or top_k
+        output_k = (rerank_top_k or self.rerank_top_k) if use_reranker else top_k
+        rerank_input_top_k = (
+            max(output_k, self.rerank_input_top_k) if use_reranker else top_k
+        )
         vector_results = self.vector_search(query, top_k=rerank_input_top_k)
         bm25_results = self.bm25_search(query, top_k=rerank_input_top_k)
         fused = reciprocal_rank_fusion([vector_results, bm25_results])
         for i, item in enumerate(fused, start=1):
-            item.setdefault("original_score", float(item.get("rrf_score", item.get("score", 0.0))))
+            item.setdefault(
+                "original_score", float(item.get("rrf_score", item.get("score", 0.0)))
+            )
             item.setdefault("original_rank", i)
             item["retrieval_method"] = "rrf"
 
@@ -73,7 +79,12 @@ class PlatformPolicyRetriever:
                     source=str(item.get("source", "Temu IP Policy")),
                     title=f"Temu IP Policy - {item.get('section', 'general')}",
                     snippet=str(item.get("text", "")),
-                    score=float(item.get("reranker_score", item.get("rrf_score", item.get("score", 0.0)))),
+                    score=float(
+                        item.get(
+                            "reranker_score",
+                            item.get("rrf_score", item.get("score", 0.0)),
+                        )
+                    ),
                     metadata=metadata,
                 )
             )

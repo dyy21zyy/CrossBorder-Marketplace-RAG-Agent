@@ -46,6 +46,8 @@ INDEX_CHECKS = [
 ]
 
 DEFAULT_DISCLAIMER = "结果仅供知识产权风险初筛参考，不构成法律意见。"
+LOCAL_RERANKER_MODEL_PATH = Path("models/bge-reranker-base")
+ANSWER_LANGUAGE_OPTIONS = {"自动": "auto", "中文": "zh", "English": "en"}
 
 
 def _risk_badge(level: str) -> str:
@@ -122,6 +124,7 @@ def _evidence_rows(evidence_bundle: dict) -> list[dict[str, Any]]:
                     "score": round(float(item.score), 4),
                     "rrf_score": metadata.get("rrf_score"),
                     "reranker_score": metadata.get("reranker_score"),
+                    "reranker_rank": metadata.get("reranker_rank"),
                     "retrieval_method": metadata.get("retrieval_method"),
                     "snippet": item.snippet,
                     "metadata": metadata,
@@ -136,6 +139,10 @@ def run_pipeline(
     enable_litigation_check: bool,
     mock_llm: bool,
     use_reranker: bool,
+    top_k: int,
+    rerank_input_top_k: int | None,
+    rerank_top_k: int | None,
+    answer_language: str,
 ) -> tuple[dict, dict, list[dict], object, dict[str, Any]]:
     from src.agents.evidence_agent import EvidenceAgent
     from src.agents.final_answer_agent import FinalAnswerAgent
@@ -165,6 +172,10 @@ def run_pipeline(
         enable_patent_check=enable_patent_check,
         enable_litigation_check=enable_litigation_check,
         use_reranker=use_reranker,
+        top_k=top_k,
+        rerank_input_top_k=rerank_input_top_k,
+        rerank_top_k=rerank_top_k,
+        answer_language=answer_language,
     )
     metrics["evidence_collection_ms"] = round(
         (time.perf_counter() - evidence_started_at) * 1000, 2
@@ -179,7 +190,9 @@ def run_pipeline(
     metrics["rewrite_ms"] = round((time.perf_counter() - rewrite_started_at) * 1000, 2)
 
     answer_started_at = time.perf_counter()
-    answer = FinalAnswerAgent().generate(listing, evidence_bundle, risk, rewrite)
+    answer = FinalAnswerAgent().generate(
+        listing, evidence_bundle, risk, rewrite, answer_language=answer_language
+    )
     metrics["final_answer_ms"] = round(
         (time.perf_counter() - answer_started_at) * 1000, 2
     )
@@ -187,6 +200,10 @@ def run_pipeline(
     metrics["evidence_count"] = len(_evidence_rows(evidence_bundle))
     metrics["routed_intents"] = ", ".join(routed.get("intents", []))
     metrics["answer_language"] = evidence_bundle.get("answer_language", "")
+    metrics["use_reranker"] = use_reranker
+    metrics["top_k"] = top_k
+    metrics["rerank_input_top_k"] = rerank_input_top_k or ""
+    metrics["rerank_top_k"] = rerank_top_k or ""
     metrics["retrieval_query_en"] = evidence_bundle.get("retrieval_query_en", "")
 
     return evidence_bundle, risk, rewrite, answer, metrics
@@ -203,21 +220,16 @@ def _render_sidebar(
     using_real_llm = (not mock_llm) and bool(settings.openai_api_key)
 
     st.sidebar.header("系统状态")
-    st.sidebar.markdown(f"- 当前是否 mock_llm：{_bool_label(mock_llm)}")
-    st.sidebar.markdown(f"- 当前是否使用真实 LLM：{_bool_label(using_real_llm)}")
-    st.sidebar.markdown(f"- 当前是否启用 reranker：{_bool_label(use_reranker)}")
+    st.sidebar.markdown(f"- MOCK_LLM：`{str(mock_llm).lower()}`")
+    st.sidebar.markdown(f"- 真实 LLM：{_bool_label(using_real_llm)}")
+    st.sidebar.markdown(f"- OPENAI_MODEL：`{settings.openai_model or '未设置'}`")
+    st.sidebar.markdown(f"- OPENAI_BASE_URL：`{settings.openai_base_url or '未设置'}`")
+    st.sidebar.markdown(f"- API Key：**{_configured_label(settings.openai_api_key)}**")
+    st.sidebar.divider()
+    st.sidebar.markdown(f"- use_reranker：{_bool_label(use_reranker)}")
+    st.sidebar.markdown(f"- enable_patent_check：{_bool_label(enable_patent_check)}")
     st.sidebar.markdown(
-        f"- 当前是否启用 patent check：{_bool_label(enable_patent_check)}"
-    )
-    st.sidebar.markdown(
-        f"- 当前是否启用 litigation check：{_bool_label(enable_litigation_check)}"
-    )
-    st.sidebar.markdown(f"- 当前 OPENAI_MODEL：`{settings.openai_model or '未设置'}`")
-    st.sidebar.markdown(
-        f"- OPENAI_BASE_URL 是否配置：**{_configured_label(settings.openai_base_url)}**"
-    )
-    st.sidebar.markdown(
-        f"- API Key 是否配置：**{_configured_label(settings.openai_api_key)}**"
+        f"- enable_litigation_check：{_bool_label(enable_litigation_check)}"
     )
 
     missing_count = sum(
@@ -289,29 +301,115 @@ def _render_screening_tab(st: Any, use_reranker_default: bool) -> None:
         litigation_default = False
 
     st.markdown("#### 运行选项")
+    mode_col, lang_col = st.columns(2)
+    run_mode = mode_col.selectbox(
+        "运行模式",
+        ["快速模式", "精确模式", "自定义模式"],
+        index=0,
+        help="快速模式降低检索数量；精确模式启用 reranker 与更多证据；自定义模式允许手动勾选。",
+    )
+    answer_language_label = lang_col.selectbox(
+        "回答语言", list(ANSWER_LANGUAGE_OPTIONS.keys()), index=0
+    )
+    answer_language = ANSWER_LANGUAGE_OPTIONS[answer_language_label]
+
+    if run_mode == "快速模式":
+        mode_use_reranker = False
+        mode_top_k = 3
+        mode_rerank_input_top_k = None
+        mode_rerank_top_k = None
+        patent_value = False
+        litigation_value = False
+    elif run_mode == "精确模式":
+        mode_use_reranker = True
+        mode_top_k = 5
+        mode_rerank_input_top_k = 10
+        mode_rerank_top_k = 5
+        patent_value = patent_default
+        litigation_value = litigation_default
+    else:
+        mode_use_reranker = use_reranker_default
+        mode_top_k = 5
+        mode_rerank_input_top_k = 10
+        mode_rerank_top_k = 5
+        patent_value = patent_default
+        litigation_value = litigation_default
+
     opt1, opt2, opt3, opt4 = st.columns(4)
     mock_llm = opt1.checkbox(
-        "mock_llm", value=True, help="开启后使用规则/模拟输出，便于本地演示。"
+        "使用 Mock LLM", value=True, help="开启后使用规则/模拟输出，便于本地演示。"
     )
-    use_reranker = opt2.checkbox("启用 reranker", value=use_reranker_default)
+    use_reranker = opt2.checkbox(
+        "启用 Reranker 精排",
+        value=mode_use_reranker,
+        disabled=run_mode != "自定义模式",
+    )
     enable_patent_check = opt3.checkbox(
-        "启用 patent check",
-        value=patent_default,
-        key=f"patent_check_{input_mode}_{patent_default}",
+        "启用专利 Claim 检索",
+        value=patent_value,
+        disabled=run_mode == "快速模式" or run_mode == "精确模式",
+        key=f"patent_check_{input_mode}_{run_mode}_{patent_value}",
     )
     enable_litigation_check = opt4.checkbox(
-        "启用 litigation check",
-        value=litigation_default,
-        key=f"litigation_check_{input_mode}_{litigation_default}",
+        "启用诉讼历史查询",
+        value=litigation_value,
+        disabled=run_mode == "快速模式",
+        key=f"litigation_check_{input_mode}_{run_mode}_{litigation_value}",
     )
+
+    if run_mode == "自定义模式":
+        custom1, custom2, custom3 = st.columns(3)
+        top_k = custom1.number_input(
+            "top_k", min_value=1, max_value=20, value=mode_top_k, step=1
+        )
+        rerank_input_top_k = custom2.number_input(
+            "rerank_input_top_k",
+            min_value=1,
+            max_value=50,
+            value=mode_rerank_input_top_k,
+            step=1,
+        )
+        rerank_top_k = custom3.number_input(
+            "rerank_top_k", min_value=1, max_value=20, value=mode_rerank_top_k, step=1
+        )
+    else:
+        top_k = mode_top_k
+        rerank_input_top_k = mode_rerank_input_top_k
+        rerank_top_k = mode_rerank_top_k
+
+    effective_use_reranker = use_reranker
+    reranker_missing = use_reranker and not LOCAL_RERANKER_MODEL_PATH.exists()
+    if reranker_missing:
+        st.warning(
+            "Reranker 模型未找到，请下载 models/bge-reranker-base 或关闭 reranker。已自动 fallback 到 no_reranker。"
+        )
+        effective_use_reranker = False
+
+    st.caption(
+        f"当前参数：mode={run_mode}, use_reranker={effective_use_reranker}, "
+        f"top_k={top_k}, rerank_input_top_k={rerank_input_top_k or '-'}, "
+        f"rerank_top_k={rerank_top_k or '-'}, answer_language={answer_language}"
+    )
+
     submitted = st.button("开始风险筛查", type="primary")
 
     _render_sidebar(
-        st, mock_llm, enable_patent_check, enable_litigation_check, use_reranker
+        st,
+        mock_llm,
+        enable_patent_check,
+        enable_litigation_check,
+        effective_use_reranker,
     )
 
     if not submitted:
         st.info("填写 Listing 信息后，点击「开始风险筛查」运行演示。")
+        return
+
+    current_settings = get_settings()
+    if not mock_llm and not current_settings.openai_api_key:
+        st.error(
+            "当前已关闭 mock_llm，但未配置 OPENAI_API_KEY。请在 .env 中配置 API Key，或重新勾选 mock_llm。"
+        )
         return
 
     listing = ListingInput(
@@ -332,7 +430,11 @@ def _render_screening_tab(st: Any, use_reranker_default: bool) -> None:
                 enable_patent_check,
                 enable_litigation_check,
                 mock_llm,
-                use_reranker,
+                effective_use_reranker,
+                int(top_k),
+                int(rerank_input_top_k) if rerank_input_top_k else None,
+                int(rerank_top_k) if rerank_top_k else None,
+                answer_language,
             )
     except Exception as exc:  # noqa: BLE001
         st.error(f"Pipeline 运行失败：{exc}")
@@ -380,6 +482,7 @@ def _render_screening_tab(st: Any, use_reranker_default: bool) -> None:
                 "score",
                 "rrf_score",
                 "reranker_score",
+                "reranker_rank",
                 "retrieval_method",
                 "snippet",
                 "metadata",
@@ -416,7 +519,7 @@ def _render_screening_tab(st: Any, use_reranker_default: bool) -> None:
 def _render_evidence_tab(st: Any) -> None:
     st.markdown("### 检索证据")
     st.info(
-        "在「风险筛查」页运行后，可在输出区域查看统一证据表。证据字段包括 source_type、source、score、rrf_score、reranker_score、retrieval_method、snippet 和 metadata。"
+        "在「风险筛查」页运行后，可在输出区域查看统一证据表。证据字段包括 source_type、source、score、rrf_score、reranker_score、reranker_rank、retrieval_method、snippet 和 metadata。"
     )
     st.markdown(
         "检索来源覆盖 USPTO 商标数据、平台 IP 政策、专利权利要求和专利诉讼摘要。"
