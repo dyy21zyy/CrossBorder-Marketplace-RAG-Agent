@@ -9,6 +9,7 @@ from typing import Any
 import pandas as pd
 
 from src.config import get_settings
+from src.listing.chinese_query_parser import parse_chinese_user_question
 from src.schemas import ListingInput
 
 INDEX_CHECKS = [
@@ -187,22 +188,72 @@ def _render_sidebar(st: Any, mock_llm: bool, enable_patent_check: bool, enable_l
 
 
 def _render_screening_tab(st: Any, use_reranker_default: bool) -> None:
-    with st.form("listing_form"):
-        st.markdown("#### 输入 Listing 信息")
+    st.markdown("#### 输入 Listing 信息")
+    input_mode = st.radio(
+        "输入模式",
+        ["自然语言问题模式", "手动 Listing 表单模式"],
+        index=0,
+        horizontal=True,
+    )
+
+    parsed_query: dict[str, Any] | None = None
+    if input_mode == "自然语言问题模式":
+        question = st.text_area(
+            "请输入你的问题 / 商品描述",
+            "我想在 Temu 美国站上架一款适用于 iPhone 15 的透明磁吸手机壳，没有 Apple 授权，有知识产权风险吗？",
+        )
+        parsed_query = parse_chinese_user_question(question)
+        st.markdown("#### 解析结果预览")
+        preview_fields = [
+            "title",
+            "description",
+            "category",
+            "platform",
+            "has_authorization",
+            "enable_patent_check",
+            "enable_litigation_check",
+            "language",
+        ]
+        st.dataframe(
+            pd.DataFrame([{"field": field, "value": parsed_query.get(field)} for field in preview_fields]),
+            use_container_width=True,
+            hide_index=True,
+        )
+        if parsed_query.get("market") == "EU":
+            st.warning("当前系统主要基于美国 USPTO 数据和 Temu 平台规则。欧盟 EUIPO 问题需要接入 EUIPO 数据源后才能准确回答。")
+
+        title = str(parsed_query.get("title", ""))
+        description = str(parsed_query.get("description", ""))
+        category = str(parsed_query.get("category", ""))
+        platform = str(parsed_query.get("platform", ""))
+        has_authorization = bool(parsed_query.get("has_authorization", False))
+        patent_default = bool(parsed_query.get("enable_patent_check", False))
+        litigation_default = bool(parsed_query.get("enable_litigation_check", False))
+    else:
         title = st.text_input("商品标题", "Phone case compatible with iPhone 15")
         description = st.text_area("商品描述", "Magnetic transparent phone case for iPhone 15")
         c1, c2 = st.columns(2)
         category = c1.text_input("商品类目", "phone accessory")
         platform = c2.text_input("销售平台", "Temu")
         has_authorization = st.checkbox("已有品牌/专利授权", value=False)
+        patent_default = False
+        litigation_default = False
 
-        st.markdown("#### 运行选项")
-        opt1, opt2, opt3, opt4 = st.columns(4)
-        mock_llm = opt1.checkbox("mock_llm", value=True, help="开启后使用规则/模拟输出，便于本地演示。")
-        use_reranker = opt2.checkbox("启用 reranker", value=use_reranker_default)
-        enable_patent_check = opt3.checkbox("启用 patent check", value=False)
-        enable_litigation_check = opt4.checkbox("启用 litigation check", value=False)
-        submitted = st.form_submit_button("开始风险筛查", type="primary")
+    st.markdown("#### 运行选项")
+    opt1, opt2, opt3, opt4 = st.columns(4)
+    mock_llm = opt1.checkbox("mock_llm", value=True, help="开启后使用规则/模拟输出，便于本地演示。")
+    use_reranker = opt2.checkbox("启用 reranker", value=use_reranker_default)
+    enable_patent_check = opt3.checkbox(
+        "启用 patent check",
+        value=patent_default,
+        key=f"patent_check_{input_mode}_{patent_default}",
+    )
+    enable_litigation_check = opt4.checkbox(
+        "启用 litigation check",
+        value=litigation_default,
+        key=f"litigation_check_{input_mode}_{litigation_default}",
+    )
+    submitted = st.button("开始风险筛查", type="primary")
 
     _render_sidebar(st, mock_llm, enable_patent_check, enable_litigation_check, use_reranker)
 
