@@ -34,7 +34,10 @@ def evaluate_risk(path='data/eval/risk_eval.jsonl',use_reranker=False):
         ev=e.collect(li,q.route(f"{li.title} {li.description}").get('intents',[]),enable_patent_check=bool(s.get('enable_patent_check',False)),enable_litigation_check=bool(s.get('enable_litigation_check',False)),use_reranker=use_reranker)
         pred=j.judge(ev)
         exp={d:s.get(ed,'unknown') for d,ed in RISK_FIELDS}; got=pred.get('dimension_risks',{})
-        rows.append({'id':s['id'],'exp':exp,'pred':{d:got.get(d,'unknown') for d,_ in RISK_FIELDS},'overall_expected':s.get('expected_overall_risk','unknown'),'overall_pred':pred.get('overall_risk','unknown')})
+        def _level(key):
+            value=got.get(key,'unknown')
+            return value.get('risk_level','unknown') if isinstance(value,dict) else value
+        rows.append({'id':s['id'],'exp':exp,'pred':{d:_level(d) for d,_ in RISK_FIELDS},'overall_expected':s.get('expected_overall_risk','unknown'),'overall_pred':pred.get('overall_risk','unknown')})
     metrics={}
     for dim,_ in RISK_FIELDS:
         acc,hr,ua,fp,fn=_score(rows,dim)

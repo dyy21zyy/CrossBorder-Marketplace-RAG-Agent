@@ -82,6 +82,9 @@ class LitigationRecord(BaseModel):
 class RiskResult(BaseModel):
     risk_type: str
     risk_level: str
+    confidence: int = 1
+    evidence_count: int = 0
+    evidence_source_types: list[str] = Field(default_factory=list)
     triggered_rules: list[str] = Field(default_factory=list)
     reason: str = ""
     evidences: list[EvidenceItem] = Field(default_factory=list)

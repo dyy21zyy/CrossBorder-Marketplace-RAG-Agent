@@ -4,7 +4,9 @@ from src.listing.listing_parser import parse_listing
 
 
 def test_risk_judge_basic() -> None:
-    parsed = parse_listing(ListingInput(title="plain bottle", description="", category="home"))
+    parsed = parse_listing(
+        ListingInput(title="plain bottle", description="", category="home")
+    )
     agent = RiskJudgeAgent()
     result = agent.judge(
         {
@@ -17,3 +19,5 @@ def test_risk_judge_basic() -> None:
     )
     assert "overall_risk" in result
     assert "dimension_risks" in result
+    assert result["risk_results"]
+    assert result["dimension_risks"]["trademark_risk"]["risk_level"] == "low"

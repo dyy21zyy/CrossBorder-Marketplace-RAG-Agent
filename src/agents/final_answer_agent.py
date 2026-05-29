@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from src.agents.llm_client import LLMClient
 from src.schemas import EvidenceItem, FinalAnswer, ListingInput
@@ -12,9 +13,13 @@ DISCLAIMER = "This system is for preliminary IP risk screening only and does not
 class FinalAnswerAgent:
     def __init__(self, llm_client: LLMClient | None = None) -> None:
         self.llm = llm_client or LLMClient()
-        self.prompt_path = Path(__file__).resolve().parents[2] / "prompts" / "final_answer.md"
+        self.prompt_path = (
+            Path(__file__).resolve().parents[2] / "prompts" / "final_answer.md"
+        )
 
-    def _compact_evidence(self, evidences: list[EvidenceItem], limit: int = 3) -> list[dict]:
+    def _compact_evidence(
+        self, evidences: list[EvidenceItem], limit: int = 3
+    ) -> list[dict]:
         out: list[dict] = []
         for e in evidences[:limit]:
             out.append(
@@ -28,52 +33,153 @@ class FinalAnswerAgent:
             )
         return out
 
-    def _build_payload(self, listing: ListingInput, evidence_bundle: dict, risk_result: dict, rewrite_suggestions: list[dict]) -> dict:
+    def _build_payload(
+        self,
+        listing: ListingInput,
+        evidence_bundle: dict,
+        risk_result: dict,
+        rewrite_suggestions: list[dict],
+    ) -> dict:
         return {
             "listing": listing.model_dump(),
             "risk_result": risk_result,
             "rewrite_suggestions": rewrite_suggestions,
             "evidence": {
-                "trademark": self._compact_evidence(evidence_bundle.get("trademark_evidence", [])),
-                "platform_policy": self._compact_evidence(evidence_bundle.get("platform_policy_evidence", [])),
-                "patent_claim": self._compact_evidence(evidence_bundle.get("patent_claim_evidence", [])),
-                "litigation": self._compact_evidence(evidence_bundle.get("litigation_evidence", [])),
+                "trademark": self._compact_evidence(
+                    evidence_bundle.get("trademark_evidence", [])
+                ),
+                "platform_policy": self._compact_evidence(
+                    evidence_bundle.get("platform_policy_evidence", [])
+                ),
+                "patent_claim": self._compact_evidence(
+                    evidence_bundle.get("patent_claim_evidence", [])
+                ),
+                "litigation": self._compact_evidence(
+                    evidence_bundle.get("litigation_evidence", [])
+                ),
             },
         }
 
-    def _template_answer(self, risk_result: dict, rewrite_suggestions: list[dict], payload: dict) -> FinalAnswer:
+    def _risk_results(self, risk_result: dict) -> list[dict[str, Any]]:
+        risk_results = risk_result.get("risk_results") or []
+        if risk_results:
+            return risk_results
         dims = risk_result.get("dimension_risks", {})
+        out: list[dict[str, Any]] = []
+        for risk_type in [
+            "trademark_risk",
+            "platform_policy_risk",
+            "patent_claim_risk",
+            "litigation_risk",
+        ]:
+            value = dims.get(risk_type, "unknown")
+            if isinstance(value, dict):
+                row = dict(value)
+                row.setdefault("risk_type", risk_type)
+                row.setdefault("risk_level", "unknown")
+            else:
+                row = {
+                    "risk_type": risk_type,
+                    "risk_level": str(value),
+                    "confidence": 1,
+                    "evidence_count": 0,
+                    "evidence_source_types": [],
+                    "reason": "Risk result was normalized from legacy dimension output.",
+                }
+            out.append(row)
+        return out
+
+    def _dimension_level(
+        self, risk_results: list[dict[str, Any]], risk_type: str
+    ) -> str:
+        for row in risk_results:
+            if row.get("risk_type") == risk_type:
+                return str(row.get("risk_level", "unknown"))
+        return "unknown"
+
+    def _has_direct_trademark_evidence(self, payload: dict) -> bool:
+        return any(
+            row.get("source_type") != "system"
+            for row in payload.get("evidence", {}).get("trademark", [])
+        )
+
+    def _template_answer(
+        self, risk_result: dict, rewrite_suggestions: list[dict], payload: dict
+    ) -> FinalAnswer:
+        risk_results = self._risk_results(risk_result)
         overall = risk_result.get("overall_risk", "unknown")
-        suggestion_lines = [f"- {x['title']}: {x['reason']}" for x in rewrite_suggestions]
+        suggestion_lines = [
+            f"- {x['title']}: {x['reason']}" for x in rewrite_suggestions
+        ]
         evidence_used = []
         for dim, rows in payload.get("evidence", {}).items():
             for row in rows:
-                evidence_used.append(f"{dim} | {row['source']} | score={row['score']}")
+                evidence_used.append(
+                    f"{dim} | {row['source']} | {row['source_type']} | score={row['score']}"
+                )
+
+        direct_tm = self._has_direct_trademark_evidence(payload)
+        trademark_basis = (
+            "potential risk based on retrieved trademark evidence"
+            if direct_tm
+            else "brand-term risk found by rule screening; no direct trademark evidence was retrieved"
+        )
+        risk_lines = []
+        for row in risk_results:
+            label = row.get("risk_type", "unknown")
+            level = row.get("risk_level", "unknown")
+            confidence = row.get("confidence", 1)
+            evidence_count = row.get("evidence_count", 0)
+            sources = ",".join(row.get("evidence_source_types", [])) or "none"
+            reason = row.get("reason", "")
+            risk_lines.append(
+                f"- {label}: {level}; confidence={confidence}/5; evidence_count={evidence_count}; evidence_source_types={sources}; reason={reason}"
+            )
 
         summary = "\n".join(
             [
-                f"Overall Risk: {overall}. evidence suggests a preliminary risk profile and may require manual review.",
-                f"Trademark Risk: {dims.get('trademark_risk', 'unknown')} (potential risk based on retrieved trademark evidence).",
-                f"Platform Policy Risk: {dims.get('platform_policy_risk', 'unknown')} (evidence suggests policy-sensitive wording may exist).",
-                f"Patent Claim Risk: {dims.get('patent_claim_risk', 'unknown')} (not enough evidence to make legal conclusions).",
-                f"Litigation Risk: {dims.get('litigation_risk', 'unknown')} (historical records may require manual review).",
-                "Evidence Used: " + ("; ".join(evidence_used) if evidence_used else "not enough evidence."),
-                "Listing Revision Suggestions:\n" + ("\n".join(suggestion_lines) if suggestion_lines else "- unknown"),
-                "Uncertainty: This is a screening outcome; unknown applies where evidence is insufficient.",
+                f"Overall Risk: {overall}. This is a preliminary screening profile and should be manually reviewed.",
+                f"Trademark Risk: {self._dimension_level(risk_results, 'trademark_risk')} ({trademark_basis}).",
+                f"Platform Policy Risk: {self._dimension_level(risk_results, 'platform_policy_risk')} (platform policy evidence is treated as review-triggering, not a standalone legal conclusion).",
+                f"Patent Claim Risk: {self._dimension_level(risk_results, 'patent_claim_risk')} (keyword or claim-retrieval overlap does not establish infringement).",
+                f"Litigation Risk: {self._dimension_level(risk_results, 'litigation_risk')} (historical records may require manual review).",
+                "Structured Risk Results:\n" + "\n".join(risk_lines),
+                "Evidence Used: "
+                + (
+                    "; ".join(evidence_used)
+                    if evidence_used
+                    else "not enough evidence."
+                ),
+                "Listing Revision Suggestions:\n"
+                + ("\n".join(suggestion_lines) if suggestion_lines else "- unknown"),
+                "Uncertainty: Unknown applies where evidence is insufficient; this screening does not say the listing is completely safe.",
                 f"Disclaimer: {DISCLAIMER}",
             ]
         )
         return FinalAnswer(
             summary=summary,
             overall_risk_level=overall,
-            risk_results=[],
+            risk_results=risk_results,
             rewrite_suggestions=[x["title"] for x in rewrite_suggestions],
             disclaimers=[DISCLAIMER],
         )
 
-    def generate(self, listing: ListingInput, evidence_bundle: dict, risk_result: dict, rewrite_suggestions: list[dict]) -> FinalAnswer:
-        payload = self._build_payload(listing, evidence_bundle, risk_result, rewrite_suggestions)
-        if self.llm.mock_llm or not self.llm.is_enabled():
+    def generate(
+        self,
+        listing: ListingInput,
+        evidence_bundle: dict,
+        risk_result: dict,
+        rewrite_suggestions: list[dict],
+    ) -> FinalAnswer:
+        payload = self._build_payload(
+            listing, evidence_bundle, risk_result, rewrite_suggestions
+        )
+        risk_results = self._risk_results(risk_result)
+        if (
+            self.llm.mock_llm
+            or not self.llm.is_enabled()
+            or not self._has_direct_trademark_evidence(payload)
+        ):
             return self._template_answer(risk_result, rewrite_suggestions, payload)
 
         try:
@@ -81,7 +187,10 @@ class FinalAnswerAgent:
             raw = self.llm.chat(
                 [
                     {"role": "system", "content": prompt},
-                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+                    {
+                        "role": "user",
+                        "content": json.dumps(payload, ensure_ascii=False),
+                    },
                 ]
             )
             if not raw:
@@ -91,7 +200,7 @@ class FinalAnswerAgent:
             return FinalAnswer(
                 summary=raw,
                 overall_risk_level=risk_result.get("overall_risk", "unknown"),
-                risk_results=[],
+                risk_results=risk_results,
                 rewrite_suggestions=[x["title"] for x in rewrite_suggestions],
                 disclaimers=[DISCLAIMER],
             )

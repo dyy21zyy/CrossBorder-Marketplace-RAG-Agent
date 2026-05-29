@@ -16,7 +16,7 @@ INDEX_HINTS = {
 
 
 def _risk_badge(level: str) -> str:
-    color = {"high": "🔴", "medium": "🟠", "low": "🟢", "unknown": "⚪"}.get(level, "⚪")
+    color = {"high": "🔴", "medium-high": "🟠", "medium": "🟡", "low": "🟢", "unknown": "⚪"}.get(level, "⚪")
     return f"{color} **{level.upper()}**"
 
 
@@ -92,10 +92,14 @@ def main() -> None:
     st.subheader("Risk Dimensions")
     dims = risk.get("dimension_risks", {})
     c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(f"Trademark Risk: {_risk_badge(dims.get('trademark_risk', 'unknown'))}")
-    c2.markdown(f"Platform Policy Risk: {_risk_badge(dims.get('platform_policy_risk', 'unknown'))}")
-    c3.markdown(f"Patent Claim Risk: {_risk_badge(dims.get('patent_claim_risk', 'unknown'))}")
-    c4.markdown(f"Litigation Risk: {_risk_badge(dims.get('litigation_risk', 'unknown'))}")
+    def _dim_level(key: str) -> str:
+        value = dims.get(key, "unknown")
+        return value.get("risk_level", "unknown") if isinstance(value, dict) else value
+
+    c1.markdown(f"Trademark Risk: {_risk_badge(_dim_level('trademark_risk'))}")
+    c2.markdown(f"Platform Policy Risk: {_risk_badge(_dim_level('platform_policy_risk'))}")
+    c3.markdown(f"Patent Claim Risk: {_risk_badge(_dim_level('patent_claim_risk'))}")
+    c4.markdown(f"Litigation Risk: {_risk_badge(_dim_level('litigation_risk'))}")
 
     st.subheader("Evidence")
     rows: list[dict] = []

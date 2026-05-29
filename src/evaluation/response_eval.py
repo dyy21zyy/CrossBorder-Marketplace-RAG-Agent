@@ -36,7 +36,11 @@ def evaluate_response(path='data/eval/response_eval.jsonl', use_llm_judge: bool=
         if 'litigation' in ans: claims+=1; unsupported += int(len(ev.get('litigation_evidence',[]))==0)
         if 'policy' in ans: claims+=1; unsupported += int(len(ev.get('platform_policy_evidence',[]))==0)
         unsupported_rate=unsupported/max(1,claims)
-        citation_cov=sum([int(rr['dimension_risks']['trademark_risk']=='unknown' or len(ev.get('trademark_evidence',[]))>0),int(rr['dimension_risks']['patent_claim_risk']=='unknown' or len(ev.get('patent_claim_evidence',[]))>0),int(rr['dimension_risks']['litigation_risk']=='unknown' or len(ev.get('litigation_evidence',[]))>0)])/3
+        dims=rr.get('dimension_risks',{})
+        def _level(key):
+            value=dims.get(key,'unknown')
+            return value.get('risk_level','unknown') if isinstance(value,dict) else value
+        citation_cov=sum([int(_level('trademark_risk')=='unknown' or len(ev.get('trademark_evidence',[]))>0),int(_level('patent_claim_risk')=='unknown' or len(ev.get('patent_claim_evidence',[]))>0),int(_level('litigation_risk')=='unknown' or len(ev.get('litigation_evidence',[]))>0)])/3
         per.append({'id':s['id'],'faithfulness':1-unsupported_rate,'unsupported_claim_rate':unsupported_rate,'answer_relevance':answer_relevance,'disclaimer_coverage':disclaimer,'forbidden_claim_rate':int(forbidden_hits>0),'citation_coverage':citation_cov})
     n=max(1,len(per))
     metrics={k:sum(x[k] for x in per)/n for k in ['faithfulness','unsupported_claim_rate','answer_relevance','disclaimer_coverage','forbidden_claim_rate','citation_coverage']}
