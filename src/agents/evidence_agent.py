@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
+from typing import Any
+
 from src.listing.listing_parser import parse_listing
 from src.retrieval.query_rewriter import (
     extract_preserved_brand_terms,
@@ -8,8 +12,45 @@ from src.retrieval.query_rewriter import (
 from src.schemas import EvidenceItem, ListingInput
 from src.utils.language import detect_language
 
+PATENT_KEYWORDS = (
+    "patent",
+    "claim",
+    "structure",
+    "mechanism",
+    "foldable",
+    "magnetic",
+    "holder",
+    "stand",
+    "专利",
+    "结构",
+    "折叠",
+    "磁吸",
+    "支架",
+)
+
 
 class EvidenceAgent:
+    def __init__(
+        self,
+        trademark_retriever: Any | None = None,
+        platform_policy_retriever: Any | None = None,
+        claim_retriever: Any | None = None,
+        litigation_retriever: Any | None = None,
+    ) -> None:
+        self.trademark_retriever = trademark_retriever
+        self.platform_policy_retriever = platform_policy_retriever
+        self.claim_retriever = claim_retriever
+        self.litigation_retriever = litigation_retriever
+
+    @staticmethod
+    def _has_patent_signal(text: str) -> bool:
+        lowered = (text or "").lower()
+        return any(keyword in lowered for keyword in PATENT_KEYWORDS)
+
+    @staticmethod
+    def _elapsed_ms(started_at: float) -> float:
+        return round((time.perf_counter() - started_at) * 1000, 2)
+
     def collect(
         self,
         listing_input: ListingInput,
@@ -21,7 +62,22 @@ class EvidenceAgent:
         rerank_input_top_k: int | None = None,
         rerank_top_k: int | None = None,
         answer_language: str = "auto",
+        progress_callback: Callable[[str], None] | None = None,
     ) -> dict:
+        def progress(message: str) -> None:
+            if progress_callback is not None:
+                progress_callback(message)
+
+        progress("正在解析问题")
+        metrics: dict[str, Any] = {
+            "parsing_latency": 0.0,
+            "trademark_latency": 0.0,
+            "platform_policy_latency": 0.0,
+            "patent_claim_latency": 0.0,
+            "litigation_latency": 0.0,
+            "reranker_latency": 0.0,
+        }
+        parsing_started_at = time.perf_counter()
         parsed = parse_listing(listing_input)
         original_question = (
             listing_input.original_question
@@ -45,16 +101,19 @@ class EvidenceAgent:
                 }:
                     parsed.candidate_brand_terms.append(brand)
                     parsed.brand_terms.append(brand)
+        metrics["parsing_latency"] = self._elapsed_ms(parsing_started_at)
         trademark_matches = []
         trademark_evidence: list[EvidenceItem] = []
         platform_evidence: list[EvidenceItem] = []
         claim_evidence: list[EvidenceItem] = []
         litigation_evidence: list[EvidenceItem] = []
 
-        try:
-            from src.retrieval.trademark_retriever import TrademarkRetriever
+        progress("正在检索商标")
+        trademark_started_at = time.perf_counter()
+        from src.retrieval.trademark_retriever import TrademarkRetriever
 
-            tm = TrademarkRetriever()
+        try:
+            tm = self.trademark_retriever or TrademarkRetriever()
             trademark_matches = tm.search_trademarks(parsed)
             trademark_evidence = [
                 m.evidence for m in trademark_matches if m.evidence is not None
@@ -68,12 +127,15 @@ class EvidenceAgent:
                     snippet="Please run python scripts/01_build_trademark_db.py first.",
                 )
             ]
+        metrics["trademark_latency"] = self._elapsed_ms(trademark_started_at)
 
         if "platform_policy" in routed_intents:
-            try:
-                from src.retrieval.platform_retriever import PlatformPolicyRetriever
+            progress("正在检索平台规则")
+            platform_started_at = time.perf_counter()
+            from src.retrieval.platform_retriever import PlatformPolicyRetriever
 
-                pr = PlatformPolicyRetriever()
+            try:
+                pr = self.platform_policy_retriever or PlatformPolicyRetriever()
                 if rerank_input_top_k is not None:
                     pr.rerank_input_top_k = rerank_input_top_k
                 if rerank_top_k is not None:
@@ -93,13 +155,35 @@ class EvidenceAgent:
                         snippet="Please run python scripts/02_build_platform_index.py first.",
                     )
                 ]
+            metrics["platform_policy_latency"] = self._elapsed_ms(platform_started_at)
+            metrics["reranker_latency"] += (
+                float(getattr(pr, "last_metrics", {}).get("reranker_latency", 0.0))
+                if "pr" in locals()
+                else 0.0
+            )
 
         patent_ids: list[str] = []
-        if enable_patent_check and "patent_claim_risk" in routed_intents:
-            try:
-                from src.retrieval.claim_retriever import ClaimRetriever
+        patent_signal_text = " ".join(
+            [
+                original_question,
+                retrieval_query_en,
+                parsed.normalized_title,
+                parsed.normalized_description,
+                listing_input.category or "",
+            ]
+        )
+        should_run_patent_claim = (
+            enable_patent_check
+            and "patent_claim_risk" in routed_intents
+            and self._has_patent_signal(patent_signal_text)
+        )
+        if should_run_patent_claim:
+            progress("正在检索专利 claim")
+            from src.retrieval.claim_retriever import ClaimRetriever
 
-                cr = ClaimRetriever()
+            try:
+                claim_started_at = time.perf_counter()
+                cr = self.claim_retriever or ClaimRetriever()
                 if rerank_input_top_k is not None:
                     cr.rerank_input_top_k = rerank_input_top_k
                 if rerank_top_k is not None:
@@ -163,14 +247,25 @@ class EvidenceAgent:
                         snippet="Please run python scripts/03_build_claim_index.py first.",
                     )
                 ]
+            metrics["patent_claim_latency"] = (
+                self._elapsed_ms(claim_started_at)
+                if "claim_started_at" in locals()
+                else 0.0
+            )
+            metrics["reranker_latency"] += (
+                float(getattr(cr, "last_metrics", {}).get("reranker_latency", 0.0))
+                if "cr" in locals()
+                else 0.0
+            )
 
-        if enable_litigation_check and (
-            "litigation_risk" in routed_intents or patent_ids
-        ):
+        has_claim_evidence = any(e.evidence_type != "system" for e in claim_evidence)
+        if enable_litigation_check and has_claim_evidence and patent_ids:
+            progress("正在查询诉讼记录")
+            from src.retrieval.litigation_retriever import LitigationRetriever
+
             try:
-                from src.retrieval.litigation_retriever import LitigationRetriever
-
-                lr = LitigationRetriever()
+                litigation_started_at = time.perf_counter()
+                lr = self.litigation_retriever or LitigationRetriever()
                 for pid in sorted(set(patent_ids)):
                     summary = lr.get_litigation_summary(pid)
                     if summary:
@@ -194,6 +289,11 @@ class EvidenceAgent:
                         snippet="Please run python scripts/04_build_litigation_db.py first.",
                     )
                 ]
+            metrics["litigation_latency"] = (
+                self._elapsed_ms(litigation_started_at)
+                if "litigation_started_at" in locals()
+                else 0.0
+            )
 
         return {
             "parsed_listing": parsed,
@@ -201,6 +301,11 @@ class EvidenceAgent:
             "retrieval_query_en": retrieval_query_en,
             "answer_language": resolved_answer_language,
             "routed_intents": routed_intents,
+            "skipped_patent_claim": not should_run_patent_claim,
+            "skipped_litigation": not (
+                enable_litigation_check and has_claim_evidence and patent_ids
+            ),
+            "metrics": metrics,
             "trademark_matches": trademark_matches,
             "trademark_evidence": trademark_evidence,
             "platform_policy_evidence": platform_evidence,

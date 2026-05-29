@@ -26,13 +26,18 @@ class LLMClient:
     def is_enabled(self) -> bool:
         return (not self.mock_llm) and bool(self.api_key)
 
-    def chat(self, messages: list[dict]) -> str:
+    def chat(self, messages: list[dict], max_tokens: int | None = None) -> str:
         if not self.is_enabled() or self._client is None:
             return ""
         try:
-            resp = self._client.chat.completions.create(
-                model=self.model, messages=messages, temperature=0
-            )
+            kwargs = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": 0,
+            }
+            if max_tokens is not None:
+                kwargs["max_tokens"] = max_tokens
+            resp = self._client.chat.completions.create(**kwargs)
             return (resp.choices[0].message.content or "").strip()
         except Exception as exc:  # noqa: BLE001
             print(f"[warning] LLM chat failed: {exc}")

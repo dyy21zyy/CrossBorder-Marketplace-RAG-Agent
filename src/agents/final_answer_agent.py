@@ -41,6 +41,7 @@ class FinalAnswerAgent:
         evidence_bundle: dict,
         risk_result: dict,
         rewrite_suggestions: list[dict],
+        answer_detail_level: str = "详细版",
     ) -> dict:
         return {
             "listing": listing.model_dump(),
@@ -49,6 +50,7 @@ class FinalAnswerAgent:
             or listing.title,
             "retrieval_query_en": evidence_bundle.get("retrieval_query_en", ""),
             "answer_language": evidence_bundle.get("answer_language", "auto"),
+            "answer_detail_level": answer_detail_level,
             "risk_result": risk_result,
             "rewrite_suggestions": rewrite_suggestions,
             "evidence": {
@@ -158,6 +160,17 @@ class FinalAnswerAgent:
                 f"- {label}: {level}; confidence={confidence}/5; evidence_count={evidence_count}; evidence_source_types={sources}; reason={reason}"
             )
 
+        detail_level = str(payload.get("answer_detail_level") or "详细版")
+        evidence_limit = 3 if detail_level == "简洁版" else 8
+        evidence_text_zh = (
+            "；".join(evidence_used[:evidence_limit]) if evidence_used else "证据不足。"
+        )
+        evidence_text_en = (
+            "; ".join(evidence_used[:evidence_limit])
+            if evidence_used
+            else "not enough evidence."
+        )
+
         if payload.get("answer_language") == "zh":
             zh_suggestion_lines = [
                 f"- {x.get('title', '')}: {x.get('reason', '')}"
@@ -170,8 +183,7 @@ class FinalAnswerAgent:
                     f"平台规则风险：{self._dimension_level(risk_results, 'platform_policy_risk')}（平台政策证据用于提示审核触发点，不等同于法律结论）。",
                     f"专利权利要求风险：{self._dimension_level(risk_results, 'patent_claim_risk')}（关键词或权利要求检索重合不代表构成侵权）。",
                     f"诉讼历史风险：{self._dimension_level(risk_results, 'litigation_risk')}（历史案件记录需要进一步人工确认）。",
-                    "使用的证据："
-                    + ("；".join(evidence_used) if evidence_used else "证据不足。"),
+                    "使用的证据：" + evidence_text_zh,
                     "Listing 修改建议：\n"
                     + (
                         "\n".join(zh_suggestion_lines)
@@ -198,12 +210,7 @@ class FinalAnswerAgent:
                 f"Patent Claim Risk: {self._dimension_level(risk_results, 'patent_claim_risk')} (keyword or claim-retrieval overlap does not establish infringement).",
                 f"Litigation Risk: {self._dimension_level(risk_results, 'litigation_risk')} (historical records may require manual review).",
                 "Structured Risk Results:\n" + "\n".join(risk_lines),
-                "Evidence Used: "
-                + (
-                    "; ".join(evidence_used)
-                    if evidence_used
-                    else "not enough evidence."
-                ),
+                "Evidence Used: " + evidence_text_en,
                 "Listing Revision Suggestions:\n"
                 + ("\n".join(suggestion_lines) if suggestion_lines else "- unknown"),
                 "Uncertainty: Unknown applies where evidence is insufficient; this screening does not say the listing is completely safe.",
@@ -225,6 +232,7 @@ class FinalAnswerAgent:
         risk_result: dict,
         rewrite_suggestions: list[dict],
         answer_language: str = "auto",
+        answer_detail_level: str = "详细版",
     ) -> FinalAnswer:
         resolved_answer_language = self._resolve_answer_language(
             answer_language, listing, evidence_bundle
@@ -234,7 +242,11 @@ class FinalAnswerAgent:
             "answer_language": resolved_answer_language,
         }
         payload = self._build_payload(
-            listing, evidence_bundle, risk_result, rewrite_suggestions
+            listing,
+            evidence_bundle,
+            risk_result,
+            rewrite_suggestions,
+            answer_detail_level=answer_detail_level,
         )
         risk_results = self._risk_results(risk_result)
         if (
@@ -246,6 +258,12 @@ class FinalAnswerAgent:
 
         try:
             prompt = self.prompt_path.read_text(encoding="utf-8")
+            if answer_detail_level == "简洁版":
+                prompt += "\n请用中文时控制在 400-600 字；用英文时 keep it concise. Focus on the key risk, evidence, and actions."
+                max_tokens = 900
+            else:
+                prompt += "\n请用中文时控制在 800-1200 字；用英文时 provide a detailed but bounded answer."
+                max_tokens = 1600
             raw = self.llm.chat(
                 [
                     {"role": "system", "content": prompt},
@@ -253,7 +271,8 @@ class FinalAnswerAgent:
                         "role": "user",
                         "content": json.dumps(payload, ensure_ascii=False),
                     },
-                ]
+                ],
+                max_tokens=max_tokens,
             )
             if not raw:
                 return self._template_answer(risk_result, rewrite_suggestions, payload)

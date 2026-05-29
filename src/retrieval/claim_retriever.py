@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,7 @@ class ClaimRetriever:
         self.collection = None
         self.bm25_data: dict[str, Any] | None = None
         self.reranker: CrossEncoderReranker | None = None
+        self.last_metrics: dict[str, float] = {"reranker_latency": 0.0}
 
     def build_claim_documents(
         self, claim_groups: list[ClaimGroup]
@@ -106,6 +108,7 @@ class ClaimRetriever:
         use_reranker: bool = False,
         rerank_top_k: int | None = None,
     ) -> list[dict[str, Any]]:
+        self.last_metrics = {"reranker_latency": 0.0}
         output_k = (rerank_top_k or self.rerank_top_k) if use_reranker else top_k
         rerank_input_top_k = (
             max(output_k, self.rerank_input_top_k) if use_reranker else top_k
@@ -123,7 +126,11 @@ class ClaimRetriever:
         if use_reranker:
             if self.reranker is None:
                 self.reranker = CrossEncoderReranker(use_reranker=True)
+            reranker_started_at = time.perf_counter()
             out = self.reranker.rerank(query, fused, top_k=output_k)
+            self.last_metrics["reranker_latency"] = round(
+                (time.perf_counter() - reranker_started_at) * 1000, 2
+            )
         else:
             out = fused[:output_k]
         for rank, row in enumerate(out, start=1):

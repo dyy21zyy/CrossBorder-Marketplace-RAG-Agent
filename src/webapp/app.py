@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import streamlit as st
 
 from src.config import get_settings
 from src.listing.chinese_query_parser import parse_chinese_user_question
@@ -133,6 +134,118 @@ def _evidence_rows(evidence_bundle: dict) -> list[dict[str, Any]]:
     return rows
 
 
+def _settings_cache_key() -> tuple[str, ...]:
+    settings = get_settings()
+    reranker_model_name = (
+        str(LOCAL_RERANKER_MODEL_PATH)
+        if LOCAL_RERANKER_MODEL_PATH.exists()
+        else settings.reranker_model_name
+    )
+    return (
+        settings.embedding_model_name,
+        reranker_model_name,
+        settings.chroma_platform_dir,
+        settings.chroma_claims_dir,
+        settings.bm25_platform_path,
+        settings.bm25_claims_path,
+        settings.duckdb_path,
+        settings.openai_model,
+        settings.openai_base_url,
+        str(bool(settings.openai_api_key)),
+        str(settings.mock_llm),
+    )
+
+
+@st.cache_resource(show_spinner="首次加载 embedding 模型...")
+def _get_cached_embedding_model(model_name: str):
+    from src.indexing.embeddings import load_embedding_model
+
+    return load_embedding_model(model_name)
+
+
+@st.cache_resource(show_spinner="首次加载 reranker 模型...")
+def _get_cached_reranker(use_reranker: bool, model_name: str):
+    from src.retrieval.reranker import CrossEncoderReranker
+
+    if not use_reranker:
+        return None
+    return CrossEncoderReranker(model_name=model_name, use_reranker=True)
+
+
+@st.cache_resource(show_spinner="首次初始化商标检索器...")
+def _get_cached_trademark_retriever(settings_key: tuple[str, ...]):
+    from src.retrieval.trademark_retriever import TrademarkRetriever
+
+    return TrademarkRetriever()
+
+
+@st.cache_resource(show_spinner="首次初始化平台规则检索器...")
+def _get_cached_platform_policy_retriever(
+    settings_key: tuple[str, ...], use_reranker: bool
+):
+    from src.retrieval.platform_retriever import PlatformPolicyRetriever
+
+    retriever = PlatformPolicyRetriever()
+    if use_reranker:
+        retriever.reranker = _get_cached_reranker(use_reranker, settings_key[1])
+    return retriever
+
+
+@st.cache_resource(show_spinner="首次初始化专利 Claim 检索器...")
+def _get_cached_claim_retriever(settings_key: tuple[str, ...], use_reranker: bool):
+    from src.retrieval.claim_retriever import ClaimRetriever
+
+    retriever = ClaimRetriever()
+    if use_reranker:
+        retriever.reranker = _get_cached_reranker(use_reranker, settings_key[1])
+    return retriever
+
+
+@st.cache_resource(show_spinner="首次初始化诉讼检索器...")
+def _get_cached_litigation_retriever(settings_key: tuple[str, ...]):
+    from src.retrieval.litigation_retriever import LitigationRetriever
+
+    return LitigationRetriever()
+
+
+@st.cache_resource(show_spinner="首次初始化 Evidence Agent...")
+def _get_cached_evidence_agent(settings_key: tuple[str, ...], use_reranker: bool):
+    from src.agents.evidence_agent import EvidenceAgent
+
+    return EvidenceAgent(
+        trademark_retriever=_get_cached_trademark_retriever(settings_key),
+        platform_policy_retriever=_get_cached_platform_policy_retriever(
+            settings_key, use_reranker
+        ),
+        claim_retriever=_get_cached_claim_retriever(settings_key, use_reranker),
+        litigation_retriever=_get_cached_litigation_retriever(settings_key),
+    )
+
+
+@st.cache_resource(show_spinner="首次初始化 Risk Judge Agent...")
+def _get_cached_risk_judge_agent(settings_key: tuple[str, ...]):
+    from src.agents.risk_judge_agent import RiskJudgeAgent
+
+    return RiskJudgeAgent()
+
+
+@st.cache_resource(show_spinner="首次初始化 Final Answer Agent...")
+def _get_cached_final_answer_agent(settings_key: tuple[str, ...]):
+    from src.agents.final_answer_agent import FinalAnswerAgent
+
+    return FinalAnswerAgent()
+
+
+def _clear_resource_caches() -> None:
+    from src.indexing.embeddings import _load_embedding_model_cached
+    from src.retrieval.reranker import _load_cross_encoder
+
+    st.cache_resource.clear()
+    get_settings.cache_clear()
+    _load_embedding_model_cached.cache_clear()
+    _load_cross_encoder.cache_clear()
+
+
 def run_pipeline(
     listing: ListingInput,
     enable_patent_check: bool,
@@ -143,12 +256,11 @@ def run_pipeline(
     rerank_input_top_k: int | None,
     rerank_top_k: int | None,
     answer_language: str,
+    answer_detail_level: str,
+    status: Any | None = None,
 ) -> tuple[dict, dict, list[dict], object, dict[str, Any]]:
-    from src.agents.evidence_agent import EvidenceAgent
-    from src.agents.final_answer_agent import FinalAnswerAgent
     from src.agents.listing_rewrite_agent import ListingRewriteAgent
     from src.agents.query_router_agent import QueryRouter
-    from src.agents.risk_judge_agent import RiskJudgeAgent
 
     os.environ["MOCK_LLM"] = "true" if mock_llm else "false"
     get_settings.cache_clear()
@@ -158,15 +270,24 @@ def run_pipeline(
     query = (
         f"{listing.title} {listing.description} {listing.category} {listing.platform}"
     )
+    settings_key = _settings_cache_key()
+    _get_cached_embedding_model(settings_key[0])
+    if use_reranker:
+        _get_cached_reranker(use_reranker, settings_key[1])
 
+    if status is not None:
+        status.update(label="正在解析问题")
     routed_started_at = time.perf_counter()
     routed = QueryRouter().route(query)
     metrics["query_router_ms"] = round(
         (time.perf_counter() - routed_started_at) * 1000, 2
     )
 
+    if status is not None:
+        status.update(label="正在检索商标 / 平台规则 / 专利 Claim / 诉讼记录")
     evidence_started_at = time.perf_counter()
-    evidence_bundle = EvidenceAgent().collect(
+    evidence_agent = _get_cached_evidence_agent(settings_key, use_reranker)
+    evidence_bundle = evidence_agent.collect(
         listing_input=listing,
         routed_intents=routed.get("intents", []),
         enable_patent_check=enable_patent_check,
@@ -176,13 +297,18 @@ def run_pipeline(
         rerank_input_top_k=rerank_input_top_k,
         rerank_top_k=rerank_top_k,
         answer_language=answer_language,
+        progress_callback=status.write if status is not None else None,
     )
     metrics["evidence_collection_ms"] = round(
         (time.perf_counter() - evidence_started_at) * 1000, 2
     )
+    metrics.update(evidence_bundle.get("metrics", {}))
 
+    if status is not None:
+        status.write("正在调用大模型生成回答")
+        status.update(label="正在调用大模型生成回答")
     risk_started_at = time.perf_counter()
-    risk = RiskJudgeAgent().judge(evidence_bundle)
+    risk = _get_cached_risk_judge_agent(settings_key).judge(evidence_bundle)
     metrics["risk_judge_ms"] = round((time.perf_counter() - risk_started_at) * 1000, 2)
 
     rewrite_started_at = time.perf_counter()
@@ -190,16 +316,27 @@ def run_pipeline(
     metrics["rewrite_ms"] = round((time.perf_counter() - rewrite_started_at) * 1000, 2)
 
     answer_started_at = time.perf_counter()
-    answer = FinalAnswerAgent().generate(
-        listing, evidence_bundle, risk, rewrite, answer_language=answer_language
+    answer = _get_cached_final_answer_agent(settings_key).generate(
+        listing,
+        evidence_bundle,
+        risk,
+        rewrite,
+        answer_language=answer_language,
+        answer_detail_level=answer_detail_level,
     )
     metrics["final_answer_ms"] = round(
         (time.perf_counter() - answer_started_at) * 1000, 2
     )
+    metrics["llm_latency"] = metrics["risk_judge_ms"] + metrics["final_answer_ms"]
+    if status is not None:
+        status.write("正在整理结果")
+        status.update(label="正在整理结果")
     metrics["total_ms"] = round((time.perf_counter() - started_at) * 1000, 2)
+    metrics["total_latency"] = metrics["total_ms"]
     metrics["evidence_count"] = len(_evidence_rows(evidence_bundle))
     metrics["routed_intents"] = ", ".join(routed.get("intents", []))
     metrics["answer_language"] = evidence_bundle.get("answer_language", "")
+    metrics["answer_detail_level"] = answer_detail_level
     metrics["use_reranker"] = use_reranker
     metrics["top_k"] = top_k
     metrics["rerank_input_top_k"] = rerank_input_top_k or ""
@@ -301,7 +438,7 @@ def _render_screening_tab(st: Any, use_reranker_default: bool) -> None:
         litigation_default = False
 
     st.markdown("#### 运行选项")
-    mode_col, lang_col = st.columns(2)
+    mode_col, lang_col, detail_col = st.columns(3)
     run_mode = mode_col.selectbox(
         "运行模式",
         ["快速模式", "精确模式", "自定义模式"],
@@ -312,6 +449,9 @@ def _render_screening_tab(st: Any, use_reranker_default: bool) -> None:
         "回答语言", list(ANSWER_LANGUAGE_OPTIONS.keys()), index=0
     )
     answer_language = ANSWER_LANGUAGE_OPTIONS[answer_language_label]
+    answer_detail_level = detail_col.selectbox(
+        "回答详略", ["简洁版", "详细版"], index=0
+    )
 
     if run_mode == "快速模式":
         mode_use_reranker = False
@@ -388,10 +528,17 @@ def _render_screening_tab(st: Any, use_reranker_default: bool) -> None:
     st.caption(
         f"当前参数：mode={run_mode}, use_reranker={effective_use_reranker}, "
         f"top_k={top_k}, rerank_input_top_k={rerank_input_top_k or '-'}, "
-        f"rerank_top_k={rerank_top_k or '-'}, answer_language={answer_language}"
+        f"rerank_top_k={rerank_top_k or '-'}, answer_language={answer_language}, "
+        f"answer_detail_level={answer_detail_level}"
     )
 
-    submitted = st.button("开始风险筛查", type="primary")
+    cache_col, run_col = st.columns([1, 3])
+    if cache_col.button(
+        "清除缓存", help="清除 Streamlit 资源缓存以及模型 lru_cache，便于调试。"
+    ):
+        _clear_resource_caches()
+        st.success("已清除缓存。下一次运行会重新加载模型与索引。")
+    submitted = run_col.button("Run Risk Screening / 开始风险筛查", type="primary")
 
     _render_sidebar(
         st,
@@ -424,7 +571,8 @@ def _render_screening_tab(st: Any, use_reranker_default: bool) -> None:
     )
 
     try:
-        with st.spinner("正在检索证据、判断风险并生成改写建议..."):
+        with st.status("正在解析问题", expanded=True) as status:
+            status.write("正在解析问题")
             evidence_bundle, risk, rewrite, answer, metrics = run_pipeline(
                 listing,
                 enable_patent_check,
@@ -435,7 +583,11 @@ def _render_screening_tab(st: Any, use_reranker_default: bool) -> None:
                 int(rerank_input_top_k) if rerank_input_top_k else None,
                 int(rerank_top_k) if rerank_top_k else None,
                 answer_language,
+                answer_detail_level,
+                status=status,
             )
+            status.write("正在整理结果")
+            status.update(label="风险筛查完成", state="complete", expanded=False)
     except Exception as exc:  # noqa: BLE001
         st.error(f"Pipeline 运行失败：{exc}")
         with st.expander("查看 traceback"):
