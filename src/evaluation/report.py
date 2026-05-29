@@ -10,8 +10,15 @@ def save_json(path:str,data:dict[str,Any]):
 def build_markdown_report(retrieval_result:dict[str,Any]|None,risk_result:dict[str,Any]|None,response_result:dict[str,Any]|None,out_path='reports/evaluation_report.md')->str:
     lines=['# Evaluation Report','',"Results are based on sample data and are intended for demonstration.",'', '## 1. Retrieval Evaluation','', '### Context Relevance Metrics','| module | Precision@5 | Recall@5 | F1@5 | MRR | MAP | Context Relevance | Avg Latency |','|---|---:|---:|---:|---:|---:|---:|---:|']
     if retrieval_result:
+        zero_recall_modules = []
         for m in retrieval_result.get('no_reranker',{}).get('by_module',[]):
             lines.append(f"| {m['module']} | {m['precision_at_k']:.3f} | {m['recall_at_k']:.3f} | {m['f1_at_k']:.3f} | {m['mrr']:.3f} | {m['map']:.3f} | {m['context_relevance']:.3f} | {m['avg_latency_sec']:.3f} |")
+            if m.get('recall_at_k', 0) == 0:
+                zero_recall_modules.append(m['module'])
+        if zero_recall_modules:
+            lines += ['', '### Retrieval Diagnostics']
+            for module in zero_recall_modules:
+                lines.append(f"- {module}: 可能是 eval labels 与 evidence 字段不匹配，或检索模块未返回可搜索文本。")
         if retrieval_result.get('reranker_ablation'):
             lines += ['', '### Reranker Ablation','| module | Recall@5 No Reranker | Recall@5 With Reranker | Δ Recall | Δ MRR | Δ Latency |','|---|---:|---:|---:|---:|---:|']
             for d in retrieval_result['reranker_ablation']:
