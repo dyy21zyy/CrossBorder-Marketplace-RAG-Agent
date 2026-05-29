@@ -58,7 +58,33 @@ EVIDENCE_REQUIREMENTS = {
     },
 }
 
-KNOWN_BRANDS = {"apple", "iphone", "ipad", "samsung", "nike", "adidas", "lego", "dyson"}
+KNOWN_BRANDS = {
+    "air max",
+    "apple",
+    "crocs",
+    "disney",
+    "dyson",
+    "ipad",
+    "iphone",
+    "lego",
+    "nike",
+    "stanley",
+    "samsung",
+    "adidas",
+}
+ZH_REQUIRED_DISCLAIMER = "本系统仅用于知识产权风险初筛，不构成法律意见"
+UNNECESSARY_ENGLISH_TEMPLATES = [
+    "for daily use",
+    "phone accessory",
+    "daily use",
+    "product listing",
+    "listing revision suggestions",
+    "overall risk",
+    "trademark risk",
+    "platform policy risk",
+    "patent claim risk",
+    "litigation risk",
+]
 
 
 def _load(path: str):
@@ -193,6 +219,85 @@ def _is_chinese_input(sample: dict) -> bool:
     )
 
 
+def _expected_brand_terms(sample: dict) -> list[str]:
+    explicit = [
+        str(x).strip() for x in sample.get("expected_brand_terms", []) if str(x).strip()
+    ]
+    if explicit:
+        return explicit
+
+    source_text = " ".join(
+        str(sample.get(key, "")) for key in ["question", "title", "description"]
+    )
+    source_lower = source_text.lower()
+    return [
+        brand
+        for brand in sorted(KNOWN_BRANDS, key=len, reverse=True)
+        if brand in source_lower
+    ]
+
+
+def _brand_preservation(answer: str, sample: dict) -> int:
+    brands = _expected_brand_terms(sample)
+    if not brands:
+        return 1
+    answer_lower = answer.lower()
+    return int(all(brand.lower() in answer_lower for brand in brands))
+
+
+def _mixed_language_penalty(answer: str, sample: dict) -> int:
+    if not _is_chinese_input(sample):
+        return 0
+
+    answer_lower = answer.lower()
+    phrase_hits = sum(
+        1 for phrase in UNNECESSARY_ENGLISH_TEMPLATES if phrase in answer_lower
+    )
+    latin_tokens = re.findall(r"[A-Za-z][A-Za-z0-9-]*", answer)
+    allowed_tokens = {
+        token for brand in KNOWN_BRANDS for token in re.findall(r"[A-Za-z0-9]+", brand)
+    }
+    allowed_tokens.update(
+        {"ip", "us", "uspto", "temu", "amazon", "ebay", "walmart", "tiktok", "llm"}
+    )
+    unnecessary_tokens = [
+        token for token in latin_tokens if token.lower() not in allowed_tokens
+    ]
+    chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", answer))
+    excessive_english = (
+        len(unnecessary_tokens) >= 16 and len(unnecessary_tokens) > chinese_chars * 0.25
+    )
+    return int(phrase_hits >= 2 or excessive_english)
+
+
+def _listing_from_sample(sample: dict):
+    from src.listing.chinese_query_parser import parse_chinese_user_question
+    from src.schemas import ListingInput
+
+    question = str(sample.get("question", "")).strip()
+    if not sample.get("title") and question:
+        parsed = parse_chinese_user_question(question)
+        return ListingInput(
+            title=parsed["title"],
+            description=parsed.get("description", ""),
+            category=parsed.get("category", ""),
+            platform=parsed.get("platform", sample.get("platform", "Temu")),
+            has_authorization=bool(
+                sample.get("has_authorization", parsed.get("has_authorization", False))
+            ),
+            original_question=question,
+        )
+
+    return ListingInput(
+        title=sample.get("title") or question or "Cross-border marketplace product",
+        description=sample.get("description", ""),
+        category=sample.get("category", ""),
+        platform=sample.get("platform", "Temu"),
+        has_authorization=bool(sample.get("has_authorization", False)),
+        original_question=question,
+    )
+
+
 def _is_negated_context(answer: str, start: int) -> bool:
     window = answer[max(0, start - 48) : start].lower()
     return any(
@@ -273,7 +378,6 @@ def evaluate_response(
         from src.agents.final_answer_agent import FinalAnswerAgent
         from src.agents.query_router_agent import QueryRouter
         from src.agents.risk_judge_agent import RiskJudgeAgent
-        from src.schemas import ListingInput
     except Exception as e:
         return {
             "per_sample": [],
@@ -285,6 +389,9 @@ def evaluate_response(
                 "forbidden_claim_rate": 0.0,
                 "citation_coverage": 0.0,
                 "chinese_answer_rate": 0.0,
+                "chinese_disclaimer_coverage": 0.0,
+                "brand_preservation": 0.0,
+                "mixed_language_penalty": 1.0,
             },
             "warning": f"evaluation dependencies unavailable: {e}",
         }
@@ -295,13 +402,7 @@ def evaluate_response(
     f = FinalAnswerAgent()
     per = []
     for s in samples:
-        li = ListingInput(
-            title=s["title"],
-            description=s.get("description", ""),
-            category=s.get("category", ""),
-            platform=s.get("platform", "Temu"),
-            has_authorization=bool(s.get("has_authorization", False)),
-        )
+        li = _listing_from_sample(s)
         ev = e.collect(
             li,
             q.route(f"{li.title} {li.description}").get("intents", []),
@@ -310,7 +411,8 @@ def evaluate_response(
             use_reranker=False,
         )
         rr = r.judge(ev)
-        answer = f.generate(li, ev, rr, []).summary
+        answer_language = "zh" if _is_chinese_input(s) else "auto"
+        answer = f.generate(li, ev, rr, [], answer_language=answer_language).summary
         ans_lower = answer.lower()
         expected = s.get("expected_answer_points", [])
         answer_relevance = _answer_relevance(answer, expected)
@@ -328,6 +430,11 @@ def evaluate_response(
         chinese_answer_rate = int(
             (not _is_chinese_input(s)) or _is_chinese_text(answer)
         )
+        chinese_disclaimer_coverage = int(
+            (not _is_chinese_input(s)) or (ZH_REQUIRED_DISCLAIMER in answer)
+        )
+        brand_preservation = _brand_preservation(answer, s)
+        mixed_language_penalty = _mixed_language_penalty(answer, s)
         per.append(
             {
                 "id": s["id"],
@@ -338,6 +445,9 @@ def evaluate_response(
                 "forbidden_claim_rate": int(forbidden_hits > 0),
                 "citation_coverage": citation_cov,
                 "chinese_answer_rate": chinese_answer_rate,
+                "chinese_disclaimer_coverage": chinese_disclaimer_coverage,
+                "brand_preservation": brand_preservation,
+                "mixed_language_penalty": mixed_language_penalty,
             }
         )
     n = max(1, len(per))
@@ -351,6 +461,9 @@ def evaluate_response(
             "forbidden_claim_rate",
             "citation_coverage",
             "chinese_answer_rate",
+            "chinese_disclaimer_coverage",
+            "brand_preservation",
+            "mixed_language_penalty",
         ]
     }
     return {"per_sample": per, "metrics": metrics}

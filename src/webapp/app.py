@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 import traceback
@@ -710,10 +711,41 @@ def _render_config_tab(st: Any) -> None:
         st.success("所有检查项均已存在。")
 
 
+def _render_eval_json(st: Any, path: Path, label: str) -> None:
+    if not path.exists():
+        st.caption(f"{label} 尚未生成：`{path}`")
+        return
+
+    with st.expander(f"查看 {label}", expanded=False):
+        try:
+            st.json(json.loads(path.read_text(encoding="utf-8")))
+        except json.JSONDecodeError:
+            st.code(path.read_text(encoding="utf-8"), language="json")
+
+
 def _render_eval_tab(st: Any) -> None:
     st.markdown("### 评估结果")
     st.info("可通过脚本运行离线评估，并将结果用于演示汇报。")
-    st.code("python scripts/06_run_eval.py --mock_llm true", language="bash")
+
+    report_path = Path("reports/evaluation_report.md")
+    if report_path.exists():
+        st.markdown(report_path.read_text(encoding="utf-8"))
+    else:
+        st.warning(
+            "尚未找到 `reports/evaluation_report.md`。请先运行以下命令生成评估报告："
+        )
+        st.code("python scripts/06_run_eval.py --all --mock_llm true", language="bash")
+
+    st.markdown("#### 原始 JSON 结果")
+    _render_eval_json(
+        st, Path("reports/retrieval_eval_results.json"), "retrieval_eval_results.json"
+    )
+    _render_eval_json(
+        st, Path("reports/risk_eval_results.json"), "risk_eval_results.json"
+    )
+    _render_eval_json(
+        st, Path("reports/response_eval_results.json"), "response_eval_results.json"
+    )
 
 
 def _render_help_tab(st: Any) -> None:

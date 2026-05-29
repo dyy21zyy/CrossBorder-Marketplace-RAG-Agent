@@ -3,126 +3,30 @@
     "mode": "no_reranker",
     "per_sample": [
       {
-        "id": "risk_001",
-        "title": "Generic listing sample 1",
-        "question": "Generic listing sample 1",
-        "expected_trademark_risk": "medium",
-        "predicted_trademark_risk": "medium",
-        "expected_platform_policy_risk": "low",
-        "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "unknown",
-        "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "high",
-        "predicted_litigation_risk": "unknown",
-        "expected_overall_risk": "medium",
-        "predicted_overall_risk": "medium",
-        "correct": false
-      },
-      {
-        "id": "risk_002",
-        "title": "Generic listing sample 2",
-        "question": "Generic listing sample 2",
-        "expected_trademark_risk": "low",
-        "predicted_trademark_risk": "medium",
-        "expected_platform_policy_risk": "unknown",
-        "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "high",
-        "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "medium",
-        "predicted_litigation_risk": "unknown",
-        "expected_overall_risk": "medium",
-        "predicted_overall_risk": "medium",
-        "correct": false
-      },
-      {
-        "id": "risk_003",
-        "title": "Generic listing sample 3",
-        "question": "Generic listing sample 3",
-        "expected_trademark_risk": "unknown",
-        "predicted_trademark_risk": "medium",
-        "expected_platform_policy_risk": "high",
-        "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "medium",
-        "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "low",
-        "predicted_litigation_risk": "unknown",
-        "expected_overall_risk": "high",
-        "predicted_overall_risk": "medium",
-        "correct": false
-      },
-      {
-        "id": "risk_004",
-        "title": "Generic listing sample 4",
-        "question": "Generic listing sample 4",
-        "expected_trademark_risk": "high",
-        "predicted_trademark_risk": "medium",
-        "expected_platform_policy_risk": "medium",
-        "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "low",
-        "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "unknown",
-        "predicted_litigation_risk": "unknown",
-        "expected_overall_risk": "high",
-        "predicted_overall_risk": "medium",
-        "correct": false
-      },
-      {
-        "id": "risk_005",
-        "title": "Listing sample 5 compatible with iPhone",
-        "question": "Listing sample 5 compatible with iPhone",
+        "id": "zh_risk_001",
+        "title": "",
+        "question": "我想在 Temu 美国站上架一款标题为“Phone case compatible with iPhone 15”的透明磁吸手机壳，没有 Apple 授权。请判断 iPhone / Apple 相关商标风险、Temu 平台规则风险，并给出标题改写建议。",
         "expected_trademark_risk": "medium",
         "predicted_trademark_risk": "medium-high",
-        "expected_platform_policy_risk": "low",
+        "expected_platform_policy_risk": "medium",
         "predicted_platform_policy_risk": "unknown",
         "expected_patent_claim_risk": "unknown",
         "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "high",
+        "expected_litigation_risk": "unknown",
         "predicted_litigation_risk": "unknown",
         "expected_overall_risk": "medium",
         "predicted_overall_risk": "medium-high",
         "correct": false
       },
       {
-        "id": "risk_006",
-        "title": "Generic listing sample 6",
-        "question": "Generic listing sample 6",
-        "expected_trademark_risk": "low",
-        "predicted_trademark_risk": "medium",
-        "expected_platform_policy_risk": "unknown",
-        "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "high",
-        "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "medium",
-        "predicted_litigation_risk": "unknown",
-        "expected_overall_risk": "medium",
-        "predicted_overall_risk": "medium",
-        "correct": false
-      },
-      {
-        "id": "risk_007",
-        "title": "Generic listing sample 7",
-        "question": "Generic listing sample 7",
-        "expected_trademark_risk": "unknown",
+        "id": "zh_risk_002",
+        "title": "",
+        "question": "我想卖一款“LEGO compatible building blocks”积木玩具，没有 LEGO 授权，准备上架 Temu 美国站。请判断 LEGO 商标风险、平台规则风险，并建议如何改写 Listing。",
+        "expected_trademark_risk": "high",
         "predicted_trademark_risk": "medium",
         "expected_platform_policy_risk": "high",
         "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "medium",
-        "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "low",
-        "predicted_litigation_risk": "unknown",
-        "expected_overall_risk": "high",
-        "predicted_overall_risk": "medium",
-        "correct": false
-      },
-      {
-        "id": "risk_008",
-        "title": "Generic listing sample 8",
-        "question": "Generic listing sample 8",
-        "expected_trademark_risk": "high",
-        "predicted_trademark_risk": "medium",
-        "expected_platform_policy_risk": "medium",
-        "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "low",
+        "expected_patent_claim_risk": "unknown",
         "predicted_patent_claim_risk": "unknown",
         "expected_litigation_risk": "unknown",
         "predicted_litigation_risk": "unknown",
@@ -131,62 +35,14 @@
         "correct": false
       },
       {
-        "id": "risk_009",
-        "title": "Generic listing sample 9",
-        "question": "Generic listing sample 9",
-        "expected_trademark_risk": "medium",
-        "predicted_trademark_risk": "medium",
-        "expected_platform_policy_risk": "low",
-        "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "unknown",
-        "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "high",
-        "predicted_litigation_risk": "unknown",
-        "expected_overall_risk": "medium",
-        "predicted_overall_risk": "medium",
-        "correct": false
-      },
-      {
-        "id": "risk_010",
-        "title": "Listing sample 10 compatible with iPhone",
-        "question": "Listing sample 10 compatible with iPhone",
-        "expected_trademark_risk": "low",
-        "predicted_trademark_risk": "medium",
-        "expected_platform_policy_risk": "unknown",
-        "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "high",
-        "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "medium",
-        "predicted_litigation_risk": "unknown",
-        "expected_overall_risk": "medium",
-        "predicted_overall_risk": "medium",
-        "correct": false
-      },
-      {
-        "id": "risk_011",
-        "title": "Generic listing sample 11",
-        "question": "Generic listing sample 11",
-        "expected_trademark_risk": "unknown",
+        "id": "zh_risk_003",
+        "title": "",
+        "question": "我想在 Temu 美国站发布“Nike Air Max style running shoes”，没有 Nike 授权。请判断 Nike 和 Air Max 相关商标风险，以及 style 这种表达是否会增加风险。",
+        "expected_trademark_risk": "high",
         "predicted_trademark_risk": "medium",
         "expected_platform_policy_risk": "high",
         "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "medium",
-        "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "low",
-        "predicted_litigation_risk": "unknown",
-        "expected_overall_risk": "high",
-        "predicted_overall_risk": "medium",
-        "correct": false
-      },
-      {
-        "id": "risk_012",
-        "title": "Generic listing sample 12",
-        "question": "Generic listing sample 12",
-        "expected_trademark_risk": "high",
-        "predicted_trademark_risk": "medium",
-        "expected_platform_policy_risk": "medium",
-        "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "low",
+        "expected_patent_claim_risk": "unknown",
         "predicted_patent_claim_risk": "unknown",
         "expected_litigation_risk": "unknown",
         "predicted_litigation_risk": "unknown",
@@ -195,225 +51,214 @@
         "correct": false
       },
       {
-        "id": "risk_013",
-        "title": "Generic listing sample 13",
-        "question": "Generic listing sample 13",
-        "expected_trademark_risk": "medium",
+        "id": "zh_risk_004",
+        "title": "",
+        "question": "我想卖“Disney cartoon backpack for kids”，没有 Disney 授权，平台是 Temu 美国站。请判断 Disney 商标/版权相关风险和平台规则风险。",
+        "expected_trademark_risk": "high",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "high",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "unknown",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "unknown",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "high",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "zh_risk_005",
+        "title": "",
+        "question": "我有 Apple 授权，想在 Temu 美国站上架“Phone case compatible with iPhone 15”。请判断授权信息是否会降低商标风险，并说明仍需注意哪些平台规则。",
+        "expected_trademark_risk": "low",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "medium",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "unknown",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "unknown",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "medium",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "zh_risk_006",
+        "title": "",
+        "question": "我想卖“transparent magnetic phone case”，标题和描述都没有使用 Apple、iPhone 或其他品牌词，准备上架 Temu 美国站。请判断商标风险是否较低。",
+        "expected_trademark_risk": "low",
         "predicted_trademark_risk": "medium",
         "expected_platform_policy_risk": "low",
         "predicted_platform_policy_risk": "unknown",
         "expected_patent_claim_risk": "unknown",
         "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "high",
+        "expected_litigation_risk": "unknown",
         "predicted_litigation_risk": "unknown",
-        "expected_overall_risk": "medium",
+        "expected_overall_risk": "low",
         "predicted_overall_risk": "medium",
         "correct": false
       },
       {
-        "id": "risk_014",
-        "title": "Generic listing sample 14",
-        "question": "Generic listing sample 14",
-        "expected_trademark_risk": "low",
-        "predicted_trademark_risk": "medium",
-        "expected_platform_policy_risk": "unknown",
-        "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "high",
-        "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "medium",
-        "predicted_litigation_risk": "unknown",
-        "expected_overall_risk": "medium",
-        "predicted_overall_risk": "medium",
-        "correct": false
-      },
-      {
-        "id": "risk_015",
-        "title": "Listing sample 15 compatible with iPhone",
-        "question": "Listing sample 15 compatible with iPhone",
-        "expected_trademark_risk": "unknown",
+        "id": "zh_risk_007",
+        "title": "",
+        "question": "我想在 Temu 美国站上架一款用于 iPhone 15 和 Samsung Galaxy 手机的“Foldable magnetic phone stand with ring holder”。请检索美国专利 claim，看是否存在与 foldable、magnetic、ring holder 相关的专利权利要求风险。",
+        "expected_trademark_risk": "medium",
         "predicted_trademark_risk": "medium-high",
-        "expected_platform_policy_risk": "high",
+        "expected_platform_policy_risk": "medium",
         "predicted_platform_policy_risk": "unknown",
         "expected_patent_claim_risk": "medium",
         "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "low",
+        "expected_litigation_risk": "unknown",
         "predicted_litigation_risk": "unknown",
-        "expected_overall_risk": "high",
+        "expected_overall_risk": "medium",
         "predicted_overall_risk": "medium-high",
         "correct": false
       },
       {
-        "id": "risk_016",
-        "title": "Generic listing sample 16",
-        "question": "Generic listing sample 16",
+        "id": "zh_risk_008",
+        "title": "",
+        "question": "我想卖“Stanley style tumbler cup”，没有 Stanley 授权，准备上架 Temu 美国站。请判断 Stanley 商标风险和 style 表达风险。",
         "expected_trademark_risk": "high",
-        "predicted_trademark_risk": "medium",
-        "expected_platform_policy_risk": "medium",
-        "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "low",
-        "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "unknown",
-        "predicted_litigation_risk": "unknown",
-        "expected_overall_risk": "high",
-        "predicted_overall_risk": "medium",
-        "correct": false
-      },
-      {
-        "id": "risk_017",
-        "title": "Generic listing sample 17",
-        "question": "Generic listing sample 17",
-        "expected_trademark_risk": "medium",
-        "predicted_trademark_risk": "medium",
-        "expected_platform_policy_risk": "low",
-        "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "unknown",
-        "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "high",
-        "predicted_litigation_risk": "unknown",
-        "expected_overall_risk": "medium",
-        "predicted_overall_risk": "medium",
-        "correct": false
-      },
-      {
-        "id": "risk_018",
-        "title": "Generic listing sample 18",
-        "question": "Generic listing sample 18",
-        "expected_trademark_risk": "low",
-        "predicted_trademark_risk": "medium",
-        "expected_platform_policy_risk": "unknown",
-        "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "high",
-        "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "medium",
-        "predicted_litigation_risk": "unknown",
-        "expected_overall_risk": "medium",
-        "predicted_overall_risk": "medium",
-        "correct": false
-      },
-      {
-        "id": "risk_019",
-        "title": "Generic listing sample 19",
-        "question": "Generic listing sample 19",
-        "expected_trademark_risk": "unknown",
         "predicted_trademark_risk": "medium",
         "expected_platform_policy_risk": "high",
         "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "medium",
+        "expected_patent_claim_risk": "unknown",
         "predicted_patent_claim_risk": "unknown",
-        "expected_litigation_risk": "low",
+        "expected_litigation_risk": "unknown",
         "predicted_litigation_risk": "unknown",
         "expected_overall_risk": "high",
         "predicted_overall_risk": "medium",
         "correct": false
       },
       {
-        "id": "risk_020",
-        "title": "Listing sample 20 compatible with iPhone",
-        "question": "Listing sample 20 compatible with iPhone",
+        "id": "zh_risk_009",
+        "title": "",
+        "question": "我想卖“Crocs style clogs”，没有 Crocs 授权，准备上架 Temu 美国站。请判断商标风险和标题改写建议。",
         "expected_trademark_risk": "high",
         "predicted_trademark_risk": "medium",
-        "expected_platform_policy_risk": "medium",
+        "expected_platform_policy_risk": "high",
         "predicted_platform_policy_risk": "unknown",
-        "expected_patent_claim_risk": "low",
+        "expected_patent_claim_risk": "unknown",
         "predicted_patent_claim_risk": "unknown",
         "expected_litigation_risk": "unknown",
         "predicted_litigation_risk": "unknown",
         "expected_overall_risk": "high",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "zh_risk_010",
+        "title": "",
+        "question": "Temu 美国站如果 Listing 标题里使用第三方品牌词，比如 iPhone、Nike、LEGO，但卖家没有 Apple、Nike 或 LEGO 授权，手机配件、运动鞋和积木类目在平台规则上可能有哪些处理风险？",
+        "expected_trademark_risk": "high",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "high",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "unknown",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "unknown",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "high",
+        "predicted_overall_risk": "medium",
+        "correct": false
+      },
+      {
+        "id": "zh_risk_011",
+        "title": "",
+        "question": "我在 Temu 美国站经营 Nike 运动鞋配件，如果用户询问欧盟 EUIPO / EUTM / TMclass 下“Nike compatible shoe charm”的商标分类和上架风险，但当前系统只接入 US 数据源，应如何提示 jurisdiction mismatch，而不是用美国商标数据强行回答？",
+        "expected_trademark_risk": "unknown",
+        "predicted_trademark_risk": "medium",
+        "expected_platform_policy_risk": "unknown",
+        "predicted_platform_policy_risk": "unknown",
+        "expected_patent_claim_risk": "unknown",
+        "predicted_patent_claim_risk": "unknown",
+        "expected_litigation_risk": "unknown",
+        "predicted_litigation_risk": "unknown",
+        "expected_overall_risk": "unknown",
         "predicted_overall_risk": "medium",
         "correct": false
       }
     ],
     "metrics": {
-      "trademark_risk_accuracy": 0.2,
+      "trademark_risk_accuracy": 0.0,
       "trademark_risk_high_risk_recall": 0.0,
       "trademark_risk_unknown_handling_accuracy": 0.0,
       "trademark_risk_false_positive_rate": 0.0,
       "trademark_risk_false_negative_rate": 0.0,
       "trademark_risk_confusion_matrix": {
         "high": {
-          "medium": 5
+          "medium": 6
         },
         "low": {
-          "medium": 5
+          "medium": 2
         },
         "medium": {
-          "medium": 4,
-          "medium-high": 1
+          "medium-high": 2
         },
         "unknown": {
-          "medium": 4,
-          "medium-high": 1
+          "medium": 1
         }
       },
-      "platform_policy_risk_accuracy": 0.25,
+      "platform_policy_risk_accuracy": 0.09090909090909091,
       "platform_policy_risk_high_risk_recall": 0.0,
       "platform_policy_risk_unknown_handling_accuracy": 1.0,
       "platform_policy_risk_false_positive_rate": 0.0,
       "platform_policy_risk_false_negative_rate": 1.0,
       "platform_policy_risk_confusion_matrix": {
         "high": {
-          "unknown": 5
+          "unknown": 6
         },
         "low": {
-          "unknown": 5
+          "unknown": 1
         },
         "medium": {
-          "unknown": 5
+          "unknown": 3
         },
         "unknown": {
-          "unknown": 5
+          "unknown": 1
         }
       },
-      "patent_claim_risk_accuracy": 0.25,
+      "patent_claim_risk_accuracy": 0.9090909090909091,
       "patent_claim_risk_high_risk_recall": 0.0,
       "patent_claim_risk_unknown_handling_accuracy": 1.0,
       "patent_claim_risk_false_positive_rate": 0.0,
-      "patent_claim_risk_false_negative_rate": 1.0,
+      "patent_claim_risk_false_negative_rate": 0.0,
       "patent_claim_risk_confusion_matrix": {
-        "high": {
-          "unknown": 5
-        },
-        "low": {
-          "unknown": 5
-        },
         "medium": {
-          "unknown": 5
+          "unknown": 1
         },
         "unknown": {
-          "unknown": 5
+          "unknown": 10
         }
       },
-      "litigation_risk_accuracy": 0.25,
+      "litigation_risk_accuracy": 1.0,
       "litigation_risk_high_risk_recall": 0.0,
       "litigation_risk_unknown_handling_accuracy": 1.0,
       "litigation_risk_false_positive_rate": 0.0,
-      "litigation_risk_false_negative_rate": 1.0,
+      "litigation_risk_false_negative_rate": 0.0,
       "litigation_risk_confusion_matrix": {
-        "high": {
-          "unknown": 5
-        },
-        "low": {
-          "unknown": 5
-        },
-        "medium": {
-          "unknown": 5
-        },
         "unknown": {
-          "unknown": 5
+          "unknown": 11
         }
       },
-      "overall_risk_accuracy": 0.5,
+      "overall_risk_accuracy": 0.09090909090909091,
       "overall_risk_confusion_matrix": {
         "high": {
-          "medium": 9,
-          "medium-high": 1
+          "medium": 6
+        },
+        "low": {
+          "medium": 1
         },
         "medium": {
-          "medium": 9,
-          "medium-high": 1
+          "medium-high": 2,
+          "medium": 1
+        },
+        "unknown": {
+          "medium": 1
         }
       },
       "sample_accuracy": 0.0
     }
-  }
+  },
+  "dataset": "data/eval/risk_eval_zh.jsonl"
 }

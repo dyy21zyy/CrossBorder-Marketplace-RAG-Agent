@@ -53,6 +53,34 @@ def _confusion_matrix(
     return {exp: dict(preds) for exp, preds in sorted(matrix.items())}
 
 
+def _listing_from_sample(sample: dict):
+    from src.listing.chinese_query_parser import parse_chinese_user_question
+    from src.schemas import ListingInput
+
+    question = str(sample.get("question", "")).strip()
+    if not sample.get("title") and question:
+        parsed = parse_chinese_user_question(question)
+        return ListingInput(
+            title=parsed["title"],
+            description=parsed.get("description", ""),
+            category=parsed.get("category", ""),
+            platform=parsed.get("platform", sample.get("platform", "Temu")),
+            has_authorization=bool(
+                sample.get("has_authorization", parsed.get("has_authorization", False))
+            ),
+            original_question=question,
+        )
+
+    return ListingInput(
+        title=sample.get("title") or question or "Cross-border marketplace product",
+        description=sample.get("description", ""),
+        category=sample.get("category", ""),
+        platform=sample.get("platform", "Temu"),
+        has_authorization=bool(sample.get("has_authorization", False)),
+        original_question=question,
+    )
+
+
 def _score(rows: list[dict[str, Any]], dim: str) -> dict[str, Any]:
     n = len(rows)
     high = [r for r in rows if _normalize_level(r[f"expected_{dim}"]) == "high"]
@@ -99,7 +127,6 @@ def evaluate_risk(path="data/eval/risk_eval.jsonl", use_reranker=False):
         from src.agents.evidence_agent import EvidenceAgent
         from src.agents.query_router_agent import QueryRouter
         from src.agents.risk_judge_agent import RiskJudgeAgent
-        from src.schemas import ListingInput
     except Exception as e:
         return {
             "mode": "with_reranker" if use_reranker else "no_reranker",
@@ -113,13 +140,7 @@ def evaluate_risk(path="data/eval/risk_eval.jsonl", use_reranker=False):
     j = RiskJudgeAgent()
     rows = []
     for s in samples:
-        li = ListingInput(
-            title=s["title"],
-            description=s.get("description", ""),
-            category=s.get("category", ""),
-            platform=s.get("platform", "Temu"),
-            has_authorization=bool(s.get("has_authorization", False)),
-        )
+        li = _listing_from_sample(s)
         ev = e.collect(
             li,
             q.route(f"{li.title} {li.description}").get("intents", []),
