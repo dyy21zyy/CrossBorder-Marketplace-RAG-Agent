@@ -195,13 +195,36 @@ class FinalAnswerAgent:
             )
             if not raw:
                 return self._template_answer(risk_result, rewrite_suggestions, payload)
-            if DISCLAIMER not in raw:
-                raw += f"\n\nDisclaimer: {DISCLAIMER}"
+
+            summary = raw
+            overall_risk_level = risk_result.get("overall_risk", "unknown")
+            output_risk_results = risk_results
+            output_rewrite_suggestions = [x["title"] for x in rewrite_suggestions]
+            try:
+                parsed = json.loads(self.llm._clean_json_response(raw))
+                if isinstance(parsed, dict):
+                    summary = str(parsed.get("summary") or parsed.get("answer") or raw)
+                    overall_risk_level = str(
+                        parsed.get("overall_risk_level")
+                        or parsed.get("overall_risk")
+                        or overall_risk_level
+                    )
+                    if isinstance(parsed.get("risk_results"), list):
+                        output_risk_results = parsed["risk_results"]
+                    if isinstance(parsed.get("rewrite_suggestions"), list):
+                        output_rewrite_suggestions = [
+                            str(item) for item in parsed["rewrite_suggestions"]
+                        ]
+            except Exception:
+                summary = raw
+
+            if DISCLAIMER not in summary:
+                summary += f"\n\nDisclaimer: {DISCLAIMER}"
             return FinalAnswer(
-                summary=raw,
-                overall_risk_level=risk_result.get("overall_risk", "unknown"),
-                risk_results=risk_results,
-                rewrite_suggestions=[x["title"] for x in rewrite_suggestions],
+                summary=summary,
+                overall_risk_level=overall_risk_level,
+                risk_results=output_risk_results,
+                rewrite_suggestions=output_rewrite_suggestions,
                 disclaimers=[DISCLAIMER],
             )
         except Exception:
