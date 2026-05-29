@@ -17,6 +17,10 @@ class EvidenceAgent:
         enable_patent_check: bool = True,
         enable_litigation_check: bool = True,
         use_reranker: bool = False,
+        top_k: int = 5,
+        rerank_input_top_k: int | None = None,
+        rerank_top_k: int | None = None,
+        answer_language: str = "auto",
     ) -> dict:
         parsed = parse_listing(listing_input)
         original_question = (
@@ -24,7 +28,11 @@ class EvidenceAgent:
             or f"{listing_input.title} {listing_input.description}".strip()
         ).strip()
         input_language = detect_language(original_question)
-        answer_language = "zh" if input_language == "zh" else "en"
+        resolved_answer_language = (answer_language or "auto").strip().lower()
+        if resolved_answer_language not in {"auto", "zh", "en"}:
+            resolved_answer_language = "auto"
+        if resolved_answer_language == "auto":
+            resolved_answer_language = "zh" if input_language == "zh" else "en"
         retrieval_query_en = (
             rewrite_query_for_retrieval(original_question, target_language="en")
             if input_language == "zh"
@@ -66,8 +74,15 @@ class EvidenceAgent:
                 from src.retrieval.platform_retriever import PlatformPolicyRetriever
 
                 pr = PlatformPolicyRetriever()
+                if rerank_input_top_k is not None:
+                    pr.rerank_input_top_k = rerank_input_top_k
+                if rerank_top_k is not None:
+                    pr.rerank_top_k = rerank_top_k
                 platform_evidence = pr.hybrid_search(
-                    retrieval_query_en, top_k=5, use_reranker=use_reranker
+                    retrieval_query_en,
+                    top_k=top_k,
+                    use_reranker=use_reranker,
+                    rerank_top_k=rerank_top_k,
                 )
             except Exception:  # noqa: BLE001
                 platform_evidence = [
@@ -85,8 +100,15 @@ class EvidenceAgent:
                 from src.retrieval.claim_retriever import ClaimRetriever
 
                 cr = ClaimRetriever()
+                if rerank_input_top_k is not None:
+                    cr.rerank_input_top_k = rerank_input_top_k
+                if rerank_top_k is not None:
+                    cr.rerank_top_k = rerank_top_k
                 raw = cr.hybrid_search(
-                    retrieval_query_en, top_k=5, use_reranker=use_reranker
+                    retrieval_query_en,
+                    top_k=top_k,
+                    use_reranker=use_reranker,
+                    rerank_top_k=rerank_top_k,
                 )
                 for i, item in enumerate(raw):
                     patent_id = str(
@@ -177,7 +199,7 @@ class EvidenceAgent:
             "parsed_listing": parsed,
             "original_question": original_question,
             "retrieval_query_en": retrieval_query_en,
-            "answer_language": answer_language,
+            "answer_language": resolved_answer_language,
             "routed_intents": routed_intents,
             "trademark_matches": trademark_matches,
             "trademark_evidence": trademark_evidence,
