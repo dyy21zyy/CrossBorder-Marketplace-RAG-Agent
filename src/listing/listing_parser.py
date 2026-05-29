@@ -37,9 +37,13 @@ def _extract_product_terms(text: str, brand_terms: list[str]) -> list[str]:
 def parse_listing(listing_input: ListingInput) -> ParsedListing:
     normalized_title = _normalize_text(listing_input.title)
     normalized_description = _normalize_text(listing_input.description)
+    normalized_original_question = _normalize_text(listing_input.original_question)
     combined = f"{normalized_title} {normalized_description}".strip()
 
-    brand_terms = extract_candidate_brand_terms(normalized_title, normalized_description)
+    brand_terms = extract_candidate_brand_terms(
+        f"{normalized_title} {normalized_original_question}".strip(),
+        normalized_description,
+    )
     risk_patterns: list[str] = []
     for pattern in _RISK_PATTERNS:
         for m in re.finditer(pattern, combined, flags=re.IGNORECASE):
