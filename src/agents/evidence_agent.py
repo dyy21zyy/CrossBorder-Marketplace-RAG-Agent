@@ -51,7 +51,15 @@ class EvidenceAgent:
                     patent_id = str(item.get("patent_id") or item.get("metadata", {}).get("patent_id", ""))
                     if patent_id:
                         patent_ids.append(patent_id)
-                    claim_evidence.append(EvidenceItem(evidence_id=str(item.get("chunk_id", f"claim-{i}")), evidence_type="patent_claim", source=str(item.get("source", "claim_groups")), title=f"Patent {patent_id}" if patent_id else "Patent claim", snippet=str(item.get("text", "")), score=float(item.get("rrf_score", item.get("score", 0.0))), metadata=item.get("metadata", {})))
+                    metadata = dict(item.get("metadata", {}))
+                    metadata.update({
+                        "retrieval_method": item.get("retrieval_method", metadata.get("retrieval_method", "rrf")),
+                        "rrf_score": item.get("rrf_score", metadata.get("rrf_score")),
+                        "reranker_score": item.get("reranker_score", metadata.get("reranker_score")),
+                        "reranker_rank": item.get("reranker_rank", metadata.get("reranker_rank")),
+                        "rank": item.get("rank", i + 1),
+                    })
+                    claim_evidence.append(EvidenceItem(evidence_id=str(item.get("chunk_id", f"claim-{i}")), evidence_type="patent_claim", source=str(item.get("source", "claim_groups")), title=f"Patent {patent_id}" if patent_id else "Patent claim", snippet=str(item.get("text", "")), score=float(item.get("reranker_score", item.get("rrf_score", item.get("score", 0.0)))), metadata=metadata))
             except Exception:  # noqa: BLE001
                 claim_evidence = [EvidenceItem(evidence_id="claim-missing", evidence_type="system", source="patent_claim", snippet="Please run python scripts/03_build_claim_index.py first.")]
 

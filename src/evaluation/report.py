@@ -23,6 +23,14 @@ def build_markdown_report(retrieval_result:dict[str,Any]|None,risk_result:dict[s
             lines += ['', '### Reranker Ablation','| module | Recall@5 No Reranker | Recall@5 With Reranker | Δ Recall | Δ MRR | Δ Latency |','|---|---:|---:|---:|---:|---:|']
             for d in retrieval_result['reranker_ablation']:
                 lines.append(f"| {d['module']} | {d.get('recall_at_5_no_reranker',0):.3f} | {d.get('recall_at_5_with_reranker',0):.3f} | {d.get('recall_at_5_delta',0):.3f} | {d.get('mrr_delta',0):.3f} | {d.get('latency_delta',0):.3f} |")
+            lines += ['', '#### Reranker Evidence Preview']
+            for d in retrieval_result['reranker_ablation']:
+                lines.append(f"- **{d['module']} no_reranker top**: {d.get('no_reranker_top_evidence_preview','')}")
+                lines.append(f"- **{d['module']} with_reranker top**: {d.get('with_reranker_top_evidence_preview','')}")
+                if d.get('with_reranker_top_evidence_scores'):
+                    lines.append(f"  - with_reranker scores: `{json.dumps(d.get('with_reranker_top_evidence_scores'), ensure_ascii=False)}`")
+                for warning in d.get('warnings', []):
+                    lines.append(f"  - Warning: {warning}")
     lines += ['', '## 2. Risk Evaluation','| risk type | Accuracy | High-risk Recall | Unknown Handling | False Positive Rate | False Negative Rate |','|---|---:|---:|---:|---:|---:|']
     if risk_result:
         m = risk_result.get('no_reranker',risk_result).get('metrics',{})
