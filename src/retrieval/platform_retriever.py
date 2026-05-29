@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from src.config import get_settings
 from src.indexing.bm25_index import bm25_search, load_bm25_index
 from src.indexing.chroma_store import load_chroma_collection, vector_search
@@ -21,6 +22,7 @@ class PlatformPolicyRetriever:
         )
         self.bm25_index = load_bm25_index(settings.bm25_platform_path)
         self.reranker: CrossEncoderReranker | None = None
+        self.last_metrics: dict[str, float] = {"reranker_latency": 0.0}
 
     def vector_search(self, query: str, top_k: int | None = None) -> list[dict]:
         return vector_search(self.collection, query, top_k=top_k or self.top_k)
@@ -35,6 +37,7 @@ class PlatformPolicyRetriever:
         use_reranker: bool = False,
         rerank_top_k: int | None = None,
     ) -> list[EvidenceItem]:
+        self.last_metrics = {"reranker_latency": 0.0}
         output_k = (rerank_top_k or self.rerank_top_k) if use_reranker else top_k
         rerank_input_top_k = (
             max(output_k, self.rerank_input_top_k) if use_reranker else top_k
@@ -52,7 +55,11 @@ class PlatformPolicyRetriever:
         if use_reranker:
             if self.reranker is None:
                 self.reranker = CrossEncoderReranker(use_reranker=True)
+            reranker_started_at = time.perf_counter()
             selected = self.reranker.rerank(query, fused, top_k=output_k)
+            self.last_metrics["reranker_latency"] = round(
+                (time.perf_counter() - reranker_started_at) * 1000, 2
+            )
         else:
             selected = fused[:output_k]
 
