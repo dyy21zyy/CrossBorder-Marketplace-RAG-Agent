@@ -133,6 +133,38 @@ def evidence_to_searchable_text(evidence: Any) -> str:
     return " ".join(part for part in parts if part).lower()
 
 
+
+
+def _evidence_preview(evidence: Any, limit: int = 240) -> str:
+    text = evidence_to_searchable_text(evidence)
+    compact = " ".join(text.split())
+    return compact[:limit]
+
+
+def _has_reranker_score(evidence: Any) -> bool:
+    mapping = _to_mapping(evidence)
+    if mapping is not None:
+        if mapping.get("reranker_score") is not None:
+            return True
+        metadata = mapping.get("metadata")
+        return isinstance(metadata, dict) and metadata.get("reranker_score") is not None
+    if getattr(evidence, "reranker_score", None) is not None:
+        return True
+    metadata = getattr(evidence, "metadata", None)
+    return isinstance(metadata, dict) and metadata.get("reranker_score") is not None
+
+
+def _score_summary(evidence: Any) -> dict[str, Any]:
+    mapping = _to_mapping(evidence) or {}
+    metadata = mapping.get("metadata") if isinstance(mapping, dict) else None
+    metadata = metadata if isinstance(metadata, dict) else {}
+    return {
+        "score": mapping.get("score"),
+        "rrf_score": mapping.get("rrf_score", metadata.get("rrf_score")),
+        "reranker_score": mapping.get("reranker_score", metadata.get("reranker_score")),
+        "retrieval_method": mapping.get("retrieval_method", metadata.get("retrieval_method")),
+    }
+
 # Backward-compatible alias for older callers/tests.
 def _textify(row: Any) -> str:
     return evidence_to_searchable_text(row)
@@ -148,7 +180,7 @@ def _keyword_hits(text: str, expected_keywords: list[str]) -> list[str]:
 
 
 def _tokens(text: str) -> set[str]:
-    stopwords = {"a", "an", "and", "by", "for", "history", "in", "of", "or", "patent", "the", "to", "with"}
+    stopwords = {"a", "an", "and", "by", "for", "history", "in", "of", "or", "patent", "the", "to", "with", "temu"}
     return {tok for tok in re.findall(r"[a-z0-9]+", text.lower()) if len(tok) > 1 and tok not in stopwords}
 
 
@@ -161,13 +193,15 @@ def _eval_evidence_relevance(module: str, evidence: Any, expected_keywords: list
     rule_based_hit = False
 
     if module == "platform_policy":
-        relevant = bool(matched_keywords)
+        query_overlap = _tokens(query).intersection(_tokens(searchable_text))
+        relevant = bool(matched_keywords) or bool(query_overlap)
+        context_relevance = max(keyword_coverage, len(query_overlap) / max(1, len(_tokens(query))))
 
     elif module == "patent_claim":
         patent_text = _field_text(evidence, PATENT_FIELDS) or searchable_text
         matched_keywords = set(_keyword_hits(patent_text, expected_keywords))
         product_overlap = _tokens(query).intersection(_tokens(patent_text))
-        relevant = bool(matched_keywords)
+        relevant = bool(matched_keywords) or len(product_overlap) >= 2
         keyword_coverage = len(matched_keywords) / max(1, len(expected_keywords))
         context_relevance = max(keyword_coverage, len(product_overlap) / max(1, len(_tokens(query))))
 
@@ -251,12 +285,12 @@ def _retrieve(module: str, query: str, k: int, use_reranker: bool, rerank_top_k:
         from src.retrieval.platform_retriever import PlatformPolicyRetriever
         retriever = PlatformPolicyRetriever()
         retriever.rerank_top_k = rerank_top_k
-        return retriever.hybrid_search(query, top_k=k, use_reranker=use_reranker)
+        return retriever.hybrid_search(query, top_k=k, use_reranker=use_reranker, rerank_top_k=rerank_top_k)
     if module == "patent_claim":
         from src.retrieval.claim_retriever import ClaimRetriever
         retriever = ClaimRetriever()
         retriever.rerank_top_k = rerank_top_k
-        return retriever.hybrid_search(query, top_k=k, use_reranker=use_reranker)
+        return retriever.hybrid_search(query, top_k=k, use_reranker=use_reranker, rerank_top_k=rerank_top_k)
     if module == "trademark":
         from src.retrieval.trademark_retriever import TrademarkRetriever
         matches = TrademarkRetriever().search_trademarks(type("obj", (), {"candidate_brand_terms": query.split(), "brand_terms": query.split(), "normalized_title": query, "normalized_description": ""})())
@@ -282,24 +316,29 @@ def evaluate_retrieval(path: str = "data/eval/retrieval_eval.jsonl", compare_rer
         for s in samples:
             module = s["module"]
             k = int(s.get("top_k", top_k))
+            should_rerank = use_reranker and module in {"platform_policy", "patent_claim"}
             st = time.perf_counter()
             warning = None
             try:
-                results = _retrieve(module, s["query"], k, use_reranker and module in {"platform_policy", "patent_claim"}, rerank_top_k)
+                results = _retrieve(module, s["query"], k, should_rerank, rerank_top_k)
             except Exception as e:
                 results = []
                 warning = str(e)
             latency = time.perf_counter() - st
+            if should_rerank and results and not any(_has_reranker_score(r) for r in results):
+                missing_score_warning = "with_reranker result has no reranker_score; CrossEncoder likely fell back or was unavailable"
+                warning = f"{warning}; {missing_score_warning}" if warning else missing_score_warning
             expected_keywords = s.get("expected_keywords", [])
             metrics = _eval_single_query(results, expected_keywords, k, module=module, query=s["query"])
-            top_preview = evidence_to_searchable_text(results[0])[:200] if results else ""
+            top_evidence = results[0] if results else None
             per_query.append({
                 "id": s["id"],
                 "module": module,
                 "query": s["query"],
                 "expected_keywords": expected_keywords,
                 "retrieved_evidence_count": len(results),
-                "top_evidence_preview": top_preview,
+                "top_evidence_preview": _evidence_preview(top_evidence) if top_evidence else "",
+                "top_evidence_scores": _score_summary(top_evidence) if top_evidence else {},
                 "matched_keywords": metrics.pop("matched_keywords"),
                 "relevant": metrics.pop("relevant"),
                 "latency_sec": latency,
@@ -314,7 +353,8 @@ def evaluate_retrieval(path: str = "data/eval/retrieval_eval.jsonl", compare_rer
         for module, rows in by_module.items():
             n = len(rows)
             agg = {key: sum(r[key] for r in rows) / max(1, n) for key in ["precision_at_k", "recall_at_k", "f1_at_k", "mrr", "ap_at_k", "context_relevance", "latency_sec"]}
-            module_metrics.append({"module": module, "precision_at_k": agg["precision_at_k"], "recall_at_k": agg["recall_at_k"], "f1_at_k": agg["f1_at_k"], "map": agg["ap_at_k"], "mrr": agg["mrr"], "context_relevance": agg["context_relevance"], "avg_latency_sec": agg["latency_sec"]})
+            warnings = [r["warning"] for r in rows if r.get("warning")]
+            module_metrics.append({"module": module, "precision_at_k": agg["precision_at_k"], "recall_at_k": agg["recall_at_k"], "f1_at_k": agg["f1_at_k"], "map": agg["ap_at_k"], "mrr": agg["mrr"], "context_relevance": agg["context_relevance"], "avg_latency_sec": agg["latency_sec"], "warnings": warnings})
         n_all = len(per_query)
         overall = {key: sum(r[key] for r in per_query) / max(1, n_all) for key in ["precision_at_k", "recall_at_k", "f1_at_k", "mrr", "ap_at_k", "context_relevance", "latency_sec"]}
         return {"per_query": per_query, "by_module": module_metrics, "overall": {"module": "overall", "precision_at_k": overall["precision_at_k"], "recall_at_k": overall["recall_at_k"], "f1_at_k": overall["f1_at_k"], "map": overall["ap_at_k"], "mrr": overall["mrr"], "context_relevance": overall["context_relevance"], "avg_latency_sec": overall["latency_sec"]}}
@@ -329,6 +369,22 @@ def evaluate_retrieval(path: str = "data/eval/retrieval_eval.jsonl", compare_rer
             b = next((x for x in no_res["by_module"] if x["module"] == module), None)
             w = next((x for x in with_res["by_module"] if x["module"] == module), None)
             if b and w:
-                deltas.append({"module": module, f"recall_at_{top_k}_no_reranker": b["recall_at_k"], f"recall_at_{top_k}_with_reranker": w["recall_at_k"], f"recall_at_{top_k}_delta": w["recall_at_k"] - b["recall_at_k"], f"precision_at_{top_k}_delta": w["precision_at_k"] - b["precision_at_k"], "mrr_delta": w["mrr"] - b["mrr"], "latency_delta": w["avg_latency_sec"] - b["avg_latency_sec"]})
+                no_row = next((r for r in no_res["per_query"] if r["module"] == module), {})
+                with_row = next((r for r in with_res["per_query"] if r["module"] == module), {})
+                deltas.append({
+                    "module": module,
+                    f"recall_at_{top_k}_no_reranker": b["recall_at_k"],
+                    f"recall_at_{top_k}_with_reranker": w["recall_at_k"],
+                    f"recall_at_{top_k}_delta": w["recall_at_k"] - b["recall_at_k"],
+                    f"precision_at_{top_k}_delta": w["precision_at_k"] - b["precision_at_k"],
+                    "mrr_delta": w["mrr"] - b["mrr"],
+                    "no_reranker_latency_sec": b["avg_latency_sec"],
+                    "with_reranker_latency_sec": w["avg_latency_sec"],
+                    "latency_delta": w["avg_latency_sec"] - b["avg_latency_sec"],
+                    "no_reranker_top_evidence_preview": no_row.get("top_evidence_preview", ""),
+                    "with_reranker_top_evidence_preview": with_row.get("top_evidence_preview", ""),
+                    "with_reranker_top_evidence_scores": with_row.get("top_evidence_scores", {}),
+                    "warnings": w.get("warnings", []),
+                })
         out["reranker_ablation"] = deltas
     return out

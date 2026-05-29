@@ -25,7 +25,7 @@ class ClaimRetriever:
         self.rerank_top_k = settings.rerank_top_k
         self.collection = None
         self.bm25_data: dict[str, Any] | None = None
-        self.reranker = CrossEncoderReranker()
+        self.reranker: CrossEncoderReranker | None = None
 
     def build_claim_documents(self, claim_groups: list[ClaimGroup]) -> list[dict[str, Any]]:
         docs: list[dict[str, Any]] = []
@@ -54,21 +54,41 @@ class ClaimRetriever:
         self._ensure_loaded()
         return bm25_lookup(self.bm25_data or {}, query, top_k=top_k)
 
-    def hybrid_search(self, query: str, top_k: int = 5, use_reranker: bool = False) -> list[dict[str, Any]]:
-        dense = self.vector_search(query, top_k=self.rerank_input_top_k)
-        sparse = self.bm25_search(query, top_k=self.rerank_input_top_k)
+    @staticmethod
+    def _claim_reranker_text(row: dict[str, Any]) -> str:
+        metadata = row.get("metadata", {}) or {}
+        return (
+            f"patent_id: {metadata.get('patent_id', row.get('patent_id', ''))}; "
+            f"independent_claim_number: {metadata.get('independent_claim_number', row.get('independent_claim_number', ''))}; "
+            f"dependent_claim_numbers: {metadata.get('dependent_claim_numbers', row.get('dependent_claim_numbers', []))}; "
+            f"claim_group_text: {metadata.get('claim_group_text', row.get('text', ''))}"
+        )
+
+    def hybrid_search(
+        self,
+        query: str,
+        top_k: int = 5,
+        use_reranker: bool = False,
+        rerank_top_k: int | None = None,
+    ) -> list[dict[str, Any]]:
+        rerank_input_top_k = max(top_k, self.rerank_input_top_k)
+        output_k = rerank_top_k or top_k
+        dense = self.vector_search(query, top_k=rerank_input_top_k)
+        sparse = self.bm25_search(query, top_k=rerank_input_top_k)
         fused = reciprocal_rank_fusion([dense, sparse])
         for i, row in enumerate(fused, start=1):
-            m = row.get("metadata", {})
             row["rrf_score"] = float(row.get("rrf_score", 0.0))
             row["retrieval_method"] = "rrf"
             row["original_score"] = row["rrf_score"]
             row["original_rank"] = i
-            row["text"] = f"patent_id: {m.get('patent_id', row.get('patent_id',''))}; independent_claim_number: {m.get('independent_claim_number','')}; dependent_claim_numbers: {m.get('dependent_claim_numbers',[])}; claim_group_text: {row.get('text','')}"
+            row["reranker_text"] = self._claim_reranker_text(row)
+
         if use_reranker:
-            out = self.reranker.rerank(query, fused, top_k=self.rerank_top_k)
+            if self.reranker is None:
+                self.reranker = CrossEncoderReranker(use_reranker=True)
+            out = self.reranker.rerank(query, fused, top_k=output_k)
         else:
-            out = fused[:top_k]
+            out = fused[:output_k]
         for rank, row in enumerate(out, start=1):
             row["rank"] = rank
         return out
