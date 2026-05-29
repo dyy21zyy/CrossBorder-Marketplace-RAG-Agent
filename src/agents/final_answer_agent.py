@@ -6,8 +6,10 @@ from typing import Any
 
 from src.agents.llm_client import LLMClient
 from src.schemas import EvidenceItem, FinalAnswer, ListingInput
+from src.utils.language import detect_language
 
 DISCLAIMER = "This system is for preliminary IP risk screening only and does not constitute legal advice."
+ZH_DISCLAIMER = "本系统仅用于知识产权风险初筛，不构成法律意见。"
 
 
 class FinalAnswerAgent:
@@ -42,6 +44,11 @@ class FinalAnswerAgent:
     ) -> dict:
         return {
             "listing": listing.model_dump(),
+            "original_question": evidence_bundle.get("original_question")
+            or listing.original_question
+            or listing.title,
+            "retrieval_query_en": evidence_bundle.get("retrieval_query_en", ""),
+            "answer_language": evidence_bundle.get("answer_language", "auto"),
             "risk_result": risk_result,
             "rewrite_suggestions": rewrite_suggestions,
             "evidence": {
@@ -103,6 +110,21 @@ class FinalAnswerAgent:
             for row in payload.get("evidence", {}).get("trademark", [])
         )
 
+    def _resolve_answer_language(
+        self, requested: str, listing: ListingInput, evidence_bundle: dict
+    ) -> str:
+        if requested in {"zh", "en"}:
+            return requested
+        bundled = evidence_bundle.get("answer_language")
+        if bundled in {"zh", "en"}:
+            return str(bundled)
+        source_text = (
+            evidence_bundle.get("original_question")
+            or listing.original_question
+            or listing.title
+        )
+        return "zh" if detect_language(str(source_text)) == "zh" else "en"
+
     def _template_answer(
         self, risk_result: dict, rewrite_suggestions: list[dict], payload: dict
     ) -> FinalAnswer:
@@ -134,6 +156,38 @@ class FinalAnswerAgent:
             reason = row.get("reason", "")
             risk_lines.append(
                 f"- {label}: {level}; confidence={confidence}/5; evidence_count={evidence_count}; evidence_source_types={sources}; reason={reason}"
+            )
+
+        if payload.get("answer_language") == "zh":
+            zh_suggestion_lines = [
+                f"- {x.get('title', '')}: {x.get('reason', '')}"
+                for x in rewrite_suggestions
+            ]
+            summary = "\n".join(
+                [
+                    f"总体风险：{overall}。这是初步风险筛查结果，建议人工复核。",
+                    f"商标风险：{self._dimension_level(risk_results, 'trademark_risk')}（{('检索到商标证据，存在潜在审查风险' if direct_tm else '规则识别到品牌词风险，但未检索到直接商标证据')}）。",
+                    f"平台规则风险：{self._dimension_level(risk_results, 'platform_policy_risk')}（平台政策证据用于提示审核触发点，不等同于法律结论）。",
+                    f"专利权利要求风险：{self._dimension_level(risk_results, 'patent_claim_risk')}（关键词或权利要求检索重合不代表构成侵权）。",
+                    f"诉讼历史风险：{self._dimension_level(risk_results, 'litigation_risk')}（历史案件记录需要进一步人工确认）。",
+                    "使用的证据："
+                    + ("；".join(evidence_used) if evidence_used else "证据不足。"),
+                    "Listing 修改建议：\n"
+                    + (
+                        "\n".join(zh_suggestion_lines)
+                        if zh_suggestion_lines
+                        else "- 暂无明确建议"
+                    ),
+                    "不确定性：当证据不足时结果会标记为 unknown；本筛查不能说明该 Listing 完全安全。",
+                    f"免责声明：{ZH_DISCLAIMER}",
+                ]
+            )
+            return FinalAnswer(
+                summary=summary,
+                overall_risk_level=overall,
+                risk_results=risk_results,
+                rewrite_suggestions=[x["title"] for x in rewrite_suggestions],
+                disclaimers=[ZH_DISCLAIMER],
             )
 
         summary = "\n".join(
@@ -170,7 +224,15 @@ class FinalAnswerAgent:
         evidence_bundle: dict,
         risk_result: dict,
         rewrite_suggestions: list[dict],
+        answer_language: str = "auto",
     ) -> FinalAnswer:
+        resolved_answer_language = self._resolve_answer_language(
+            answer_language, listing, evidence_bundle
+        )
+        evidence_bundle = {
+            **evidence_bundle,
+            "answer_language": resolved_answer_language,
+        }
         payload = self._build_payload(
             listing, evidence_bundle, risk_result, rewrite_suggestions
         )
@@ -218,14 +280,18 @@ class FinalAnswerAgent:
             except Exception:
                 summary = raw
 
-            if DISCLAIMER not in summary:
-                summary += f"\n\nDisclaimer: {DISCLAIMER}"
+            required_disclaimer = (
+                ZH_DISCLAIMER if resolved_answer_language == "zh" else DISCLAIMER
+            )
+            label = "免责声明" if resolved_answer_language == "zh" else "Disclaimer"
+            if required_disclaimer not in summary:
+                summary += f"\n\n{label}: {required_disclaimer}"
             return FinalAnswer(
                 summary=summary,
                 overall_risk_level=overall_risk_level,
                 risk_results=output_risk_results,
                 rewrite_suggestions=output_rewrite_suggestions,
-                disclaimers=[DISCLAIMER],
+                disclaimers=[required_disclaimer],
             )
         except Exception:
             return self._template_answer(risk_result, rewrite_suggestions, payload)

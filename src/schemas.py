@@ -13,6 +13,7 @@ class ListingInput(BaseModel):
     category: str = ""
     platform: str = ""
     has_authorization: bool = False
+    original_question: str = ""
 
 
 class ParsedListing(BaseModel):
